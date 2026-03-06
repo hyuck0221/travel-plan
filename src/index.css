@@ -210,12 +210,18 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 /* ==========================================
    Itinerary Panel
    ========================================== */
+.itinerary-panel-wrapper {
+  height: 100%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .itinerary-panel {
-  /* width is controlled via inline style from App.jsx */
+  width: 100%;
   height: 100%;
   overflow-y: auto;
   background: var(--color-bg);
-  flex-shrink: 0;
 }
 
 .panel-resizer {
@@ -225,6 +231,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   background: var(--color-border);
   cursor: col-resize;
   position: relative;
+  z-index: 10;
   transition: background 0.15s;
 }
 
@@ -428,6 +435,21 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   border-color: var(--color-active-border);
   background: var(--color-active-bg);
   box-shadow: 0 0 0 2px rgba(79,156,249,0.15);
+}
+
+.itinerary-item--current {
+  border-left: 4px solid var(--color-primary);
+}
+
+.badge-now {
+  background: var(--color-primary);
+  color: white;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .itinerary-item--editing {
@@ -1018,12 +1040,16 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 /* ==========================================
    Map Panel
    ========================================== */
-.map-panel {
-  width: 60%;
+.map-panel-wrapper {
   height: 100%;
   position: relative;
   overflow: hidden;
   flex: 1;
+}
+
+.map-panel {
+  width: 100%;
+  height: 100%;
 }
 
 #naver-map {
@@ -1560,4 +1586,136 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* ==========================================
+   Mobile Responsive
+   ========================================== */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .header-left { gap: 8px; }
+  .header-title h1 { display: none; } /* Hide title text on very small screens */
+  
+  .header-actions {
+    gap: 4px;
+  }
+
+  .header-actions .btn {
+    padding: 6px;
+    min-width: 32px;
+    justify-content: center;
+  }
+  
+  .header-actions .btn span:not(.icon-loader) {
+    display: none; /* Hide button text on mobile */
+  }
+
+  .plan-selector {
+    max-width: 140px;
+  }
+
+  .panels {
+    flex-direction: column;
+    position: relative;
+  }
+
+  .panel-resizer {
+    display: none;
+  }
+
+  .itinerary-panel-wrapper, .map-panel-wrapper {
+    width: 100% !important;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    transition: transform 0.3s ease-out, visibility 0.3s;
+  }
+
+  .itinerary-panel--hidden, .map-panel--hidden {
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(100%);
+  }
+  
+  .itinerary-panel--hidden { transform: translateX(-100%); }
+
+  .mobile-view-switcher {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    background: var(--color-surface);
+    border-radius: 30px;
+    padding: 4px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--color-border);
+  }
+
+  .switcher-btn {
+    padding: 8px 16px;
+    border-radius: 26px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .switcher-btn--active {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .search-bar-wrapper {
+    top: 8px;
+    width: calc(100% - 16px);
+  }
+
+  .map-controls {
+    bottom: 80px; /* Adjust for switcher */
+  }
+
+  /* Make action buttons visible on touch */
+  .item-action-btns {
+    opacity: 1 !important;
+  }
+
+  .category-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+
+  .item-icon-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+
+  .itinerary-item {
+    padding: 12px;
+  }
+
+  .item-destination {
+    font-size: 15px;
+  }
+
+  .item-address, .item-memo {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-view-switcher {
+    display: none;
+  }
 }

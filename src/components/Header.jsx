@@ -143,7 +143,7 @@ export default function Header({
               title={isUrlLimitReached ? "전체 링크 복사" : "단축 링크 복사"}
             >
               {loading === 'shorten' ? <IconLoader /> : <IconLink />}
-              {isUrlLimitReached ? "링크 복사" : "링크 단축하여 복사"}
+              <span>{isUrlLimitReached ? "링크 복사" : "링크 단축하여 복사"}</span>
             </button>
             <button 
               className="btn btn-secondary" 
@@ -152,11 +152,11 @@ export default function Header({
               title={isUrlLimitReached ? "용량 초과로 비활성" : "QR 코드 생성"}
             >
               {loading === 'qr' ? <IconLoader /> : <IconQR />}
-              QR
+              <span>QR</span>
             </button>
             <button className="btn btn-primary" onClick={handleShare} title="공유하기">
               <IconShare />
-              공유
+              <span>공유</span>
             </button>
           </div>
         </div>

@@ -78,7 +78,7 @@ function DropZone({ isActive, onDragOver, onDragLeave, onDrop }) {
   )
 }
 
-export default function ItineraryPanel({ items, title, onTitleChange, activeItemId, onUpdate, onDelete, onItemClick, onAddItem, style }) {
+export default function ItineraryPanel({ items, title, onTitleChange, activeItemId, currentItemId, onUpdate, onDelete, onItemClick, onAddItem, style }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(title)
   const titleInputRef = useRef(null)
@@ -212,6 +212,7 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
                   date={section.date}
                   items={section.items}
                   activeItemId={activeItemId}
+                  currentItemId={currentItemId}
                   onUpdate={onUpdate}
                   onDelete={onDelete}
                   onItemClick={onItemClick}
@@ -227,6 +228,7 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
                   <ItineraryItem
                     item={section.item}
                     isActive={activeItemId === section.item.id}
+                    isCurrent={currentItemId === section.item.id}
                     isDraggable
                     onUpdate={onUpdate}
                     onDelete={onDelete}

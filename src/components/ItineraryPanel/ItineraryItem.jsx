@@ -30,7 +30,7 @@ function formatDisplayDate(d) {
   return `${y}.${m}.${day}`
 }
 
-export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onClick, isDraggable, onEditingChange }) {
+export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onDelete, onClick, isDraggable, onEditingChange }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
     date: item.date, time: item.time,
@@ -241,7 +241,7 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
   return (
     <div
       ref={itemRef}
-      className={`itinerary-item${isActive ? ' itinerary-item--active' : ''}`}
+      className={`itinerary-item${isActive ? ' itinerary-item--active' : ''}${isCurrent ? ' itinerary-item--current' : ''}`}
       onClick={() => onClick(item.id)}
       onDoubleClick={enterEdit}
     >
@@ -258,8 +258,9 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
           )}
         </div>
         <div className="item-info">
-          {(item.date || item.time) && (
+          {(item.date || item.time || isCurrent) && (
             <div className="item-datetime">
+              {isCurrent && <span className="badge-now">현재</span>}
               {item.date && <span className="item-date">{item.date}</span>}
               {item.date && item.time && <span> · </span>}
               {item.time && <span className="item-time">{item.time}</span>}
