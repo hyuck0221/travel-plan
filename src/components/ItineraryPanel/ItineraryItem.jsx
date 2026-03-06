@@ -1,0 +1,198 @@
+import { useState, useRef, useEffect } from 'react'
+import { IconEdit, IconTrash, IconPin } from '../Icons'
+import DatePicker from '../DatePicker'
+import TimePicker from '../TimePicker'
+import PlaceSearchInput from '../PlaceSearchInput'
+
+function formatDisplayDate(d) {
+  if (!d) return null
+  const [y, m, day] = d.split('-')
+  return `${y}.${m}.${day}`
+}
+
+export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onClick }) {
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({
+    date: item.date, time: item.time,
+    destination: item.destination, address: item.address, memo: item.memo,
+    lat: item.lat, lng: item.lng,
+  })
+  const [showDate, setShowDate] = useState(false)
+  const [showTime, setShowTime] = useState(false)
+  const itemRef = useRef(null)
+
+  useEffect(() => {
+    if (isActive && itemRef.current) {
+      itemRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [isActive])
+
+  useEffect(() => {
+    if (!editing) {
+      setForm({
+        date: item.date, time: item.time,
+        destination: item.destination, address: item.address, memo: item.memo,
+        lat: item.lat, lng: item.lng,
+      })
+    }
+  }, [item, editing])
+
+  const handleSave = () => { onUpdate(item.id, form); setEditing(false) }
+
+  const handleCancel = () => {
+    setForm({
+      date: item.date, time: item.time,
+      destination: item.destination, address: item.address, memo: item.memo,
+      lat: item.lat, lng: item.lng,
+    })
+    setShowDate(false)
+    setShowTime(false)
+    setEditing(false)
+  }
+
+  const enterEdit = (e) => { e.stopPropagation(); setEditing(true) }
+
+  const markerLabel = item.markerNumber != null
+    ? <span className="marker-badge">{item.markerNumber}</span>
+    : <span className="marker-badge marker-badge--no-pin"><IconPin size={13} /></span>
+
+  if (editing) {
+    return (
+      <div
+        ref={itemRef}
+        className={`itinerary-item itinerary-item--editing${isActive ? ' itinerary-item--active' : ''}`}
+      >
+        <div className="item-edit-form">
+
+          {/* 날짜 toggle */}
+          <div className="field-toggle-row">
+            <span className="field-toggle-label">날짜</span>
+            <span className="field-toggle-value">
+              {form.date ? formatDisplayDate(form.date) : <span className="field-toggle-empty">미설정</span>}
+            </span>
+            <button
+              type="button"
+              className={`field-toggle-btn${showDate ? ' field-toggle-btn--active' : ''}`}
+              onClick={() => setShowDate(v => !v)}
+            >
+              {showDate ? '완료' : '변경'}
+            </button>
+          </div>
+          {showDate && (
+            <DatePicker
+              value={form.date}
+              onChange={date => setForm(f => ({ ...f, date }))}
+            />
+          )}
+
+          {/* 시간 toggle */}
+          <div className="field-toggle-row" style={{ marginTop: 6 }}>
+            <span className="field-toggle-label">시간</span>
+            <span className="field-toggle-value">
+              {form.time || <span className="field-toggle-empty">미설정</span>}
+            </span>
+            <button
+              type="button"
+              className={`field-toggle-btn${showTime ? ' field-toggle-btn--active' : ''}`}
+              onClick={() => setShowTime(v => !v)}
+            >
+              {showTime ? '완료' : '변경'}
+            </button>
+          </div>
+          {showTime && (
+            <TimePicker
+              value={form.time}
+              onChange={time => setForm(f => ({ ...f, time }))}
+            />
+          )}
+
+          {/* 장소 */}
+          <div className="form-row" style={{ marginTop: 8 }}>
+            <label>장소</label>
+            <PlaceSearchInput
+              value={form.destination}
+              onChange={val => setForm(f => ({ ...f, destination: val }))}
+              placeholder="장소명"
+              onSelectResult={r => setForm(f => ({
+                ...f,
+                destination: r.title,
+                address: r.roadAddress || r.address || '',
+                lat: r.lat,
+                lng: r.lng,
+              }))}
+            />
+          </div>
+
+          {/* 주소 */}
+          <div className="form-row">
+            <label>주소</label>
+            <PlaceSearchInput
+              value={form.address}
+              onChange={val => setForm(f => ({ ...f, address: val }))}
+              placeholder="주소"
+              onSelectResult={r => setForm(f => ({
+                ...f,
+                address: r.roadAddress || r.address || '',
+                lat: r.lat,
+                lng: r.lng,
+              }))}
+            />
+          </div>
+
+          {/* 메모 */}
+          <div className="form-row">
+            <label>메모</label>
+            <textarea
+              value={form.memo}
+              placeholder="메모를 입력하세요"
+              rows={2}
+              onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
+              style={{ userSelect: 'text' }}
+            />
+          </div>
+
+          <div className="form-actions">
+            <button className="btn btn-primary btn-sm" onClick={handleSave}>저장</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleCancel}>취소</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={itemRef}
+      className={`itinerary-item${isActive ? ' itinerary-item--active' : ''}`}
+      onClick={() => onClick(item.id)}
+      onDoubleClick={enterEdit}
+    >
+      <div className="item-header">
+        <div className="item-marker">{markerLabel}</div>
+        <div className="item-info">
+          {(item.date || item.time) && (
+            <div className="item-datetime">
+              {item.date && <span className="item-date">{item.date}</span>}
+              {item.date && item.time && <span> · </span>}
+              {item.time && <span className="item-time">{item.time}</span>}
+            </div>
+          )}
+          <div className="item-destination">
+            {item.destination || <span className="item-placeholder">장소 미지정</span>}
+          </div>
+          {item.address && <div className="item-address">{item.address}</div>}
+          {item.memo && <div className="item-memo">{item.memo}</div>}
+        </div>
+        <div className="item-action-btns">
+          <button className="item-icon-btn" onClick={enterEdit} title="편집">
+            <IconEdit size={14} />
+          </button>
+          <button className="item-icon-btn item-icon-btn--delete"
+            onClick={e => { e.stopPropagation(); onDelete(item.id) }} title="삭제">
+            <IconTrash size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
