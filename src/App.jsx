@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import Header from './components/Header'
 import ItineraryPanel from './components/ItineraryPanel'
 import MapPanel from './components/MapPanel'
+import ConflictDialog from './components/ConflictDialog'
 import { useItineraries } from './hooks/useItineraries'
 import { computeNumberedItems } from './utils/markerNumbers'
 
@@ -13,6 +14,8 @@ export default function App() {
     title, items, addItem, updateItem, deleteItem, setTitle,
     canUndo, canRedo, undo, redo,
     plans, activeId, createPlan, deletePlan, switchPlan,
+    isUrlLimitReached,
+    conflictData, resolveConflict,
   } = useItineraries()
 
   const [activeItemId, setActiveItemId] = useState(null)
@@ -79,6 +82,7 @@ export default function App() {
         canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}
         plans={plans} activeId={activeId}
         onCreatePlan={createPlan} onDeletePlan={deletePlan} onSwitchPlan={switchPlan}
+        isUrlLimitReached={isUrlLimitReached}
       />
       <div className="panels" ref={containerRef}>
         <ItineraryPanel
@@ -94,6 +98,7 @@ export default function App() {
           onMarkerClick={handleMarkerClick} onRegisterPlace={handleRegisterPlace}
         />
       </div>
+      <ConflictDialog conflictData={conflictData} onResolve={resolveConflict} />
     </div>
   )
 }

@@ -83,6 +83,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   const markersRef = useRef([])
   const polylinesRef = useRef([])
   const initializedRef = useRef(false)
+  const itemsRef = useRef(items)
   const previewMarkerRef = useRef(null)
   const previewInfoWindowRef = useRef(null)
   const locationMarkerRef = useRef(null)
@@ -90,6 +91,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   const onRegisterRef = useRef(onRegisterPlace)
 
   useEffect(() => { onRegisterRef.current = onRegisterPlace }, [onRegisterPlace])
+  useEffect(() => { itemsRef.current = items }, [items])
 
   const [previewPlace, setPreviewPlace] = useState(null)
   const [tracking, setTracking] = useState(false)
@@ -106,6 +108,29 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
         mapTypeId: window.naver.maps.MapTypeId.NORMAL,
       })
       mapInstanceRef.current = map
+
+      // 초기 위치: 일정 좌표 → 현재 위치 → 서울 기본
+      const coordItems = itemsRef.current.filter(i => i.lat != null && i.lng != null)
+      if (coordItems.length === 1) {
+        map.setCenter(new window.naver.maps.LatLng(coordItems[0].lat, coordItems[0].lng))
+        map.setZoom(14)
+      } else if (coordItems.length > 1) {
+        const lats = coordItems.map(i => i.lat)
+        const lngs = coordItems.map(i => i.lng)
+        const sw = new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs))
+        const ne = new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs))
+        map.fitBounds(new window.naver.maps.LatLngBounds(sw, ne), { top: 80, right: 30, bottom: 30, left: 30 })
+      } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          ({ coords }) => {
+            if (mapInstanceRef.current) {
+              mapInstanceRef.current.setCenter(new window.naver.maps.LatLng(coords.latitude, coords.longitude))
+              mapInstanceRef.current.setZoom(13)
+            }
+          },
+          () => {} // 권한 없으면 서울 기본 유지
+        )
+      }
 
       // Map click → preview pin with reverse geocode
       window.naver.maps.Event.addListener(map, 'click', (e) => {

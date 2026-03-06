@@ -17,6 +17,13 @@ const CATEGORIES = [
 
 const categoryEmoji = Object.fromEntries(CATEGORIES.map(c => [c.key, c.emoji]))
 
+const formatCostDisplay = (val) => {
+  if (!val) return ''
+  const digits = String(val).replace(/\D/g, '')
+  if (!digits) return ''
+  return '₩' + Number(digits).toLocaleString('ko-KR')
+}
+
 function formatDisplayDate(d) {
   if (!d) return null
   const [y, m, day] = d.split('-')
@@ -29,7 +36,7 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
     date: item.date, time: item.time,
     destination: item.destination, address: item.address, memo: item.memo,
     lat: item.lat, lng: item.lng,
-    cost: item.cost || '',
+    cost: (item.cost || '').replace(/\D/g, ''),
     category: item.category || '',
   })
   const [showDate, setShowDate] = useState(false)
@@ -43,12 +50,25 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
   }, [isActive])
 
   useEffect(() => {
+    if (!isActive || editing) return
+    const handler = (e) => {
+      if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        setEditing(true)
+        onEditingChange?.(true)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [isActive, editing, onEditingChange])
+
+  useEffect(() => {
     if (!editing) {
       setForm({
         date: item.date, time: item.time,
         destination: item.destination, address: item.address, memo: item.memo,
         lat: item.lat, lng: item.lng,
-        cost: item.cost || '',
+        cost: (item.cost || '').replace(/\D/g, ''),
         category: item.category || '',
       })
     }
@@ -61,7 +81,7 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
       date: item.date, time: item.time,
       destination: item.destination, address: item.address, memo: item.memo,
       lat: item.lat, lng: item.lng,
-      cost: item.cost || '',
+      cost: (item.cost || '').replace(/\D/g, ''),
       category: item.category || '',
     })
     setShowDate(false)
@@ -76,11 +96,17 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
     ? <span className="marker-badge">{item.markerNumber}</span>
     : <span className="marker-badge marker-badge--no-pin"><IconPin size={13} /></span>
 
+  const handleEditKeyDown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); handleCancel() }
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); handleSave() }
+  }
+
   if (editing) {
     return (
       <div
         ref={itemRef}
         className={`itinerary-item itinerary-item--editing${isActive ? ' itinerary-item--active' : ''}`}
+        onKeyDown={handleEditKeyDown}
       >
         <div className="item-edit-form">
 
@@ -151,6 +177,7 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
               value={form.destination}
               onChange={val => setForm(f => ({ ...f, destination: val }))}
               placeholder="장소명"
+              autoFocus
               onSelectResult={r => setForm(f => ({
                 ...f,
                 destination: r.title,
@@ -194,9 +221,10 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
             <label>경비</label>
             <input
               type="text"
+              inputMode="numeric"
               value={form.cost}
-              placeholder="예: ₩50,000"
-              onChange={e => setForm(f => ({ ...f, cost: e.target.value }))}
+              placeholder="숫자만 입력 (예: 50000)"
+              onChange={e => setForm(f => ({ ...f, cost: e.target.value.replace(/\D/g, '') }))}
               style={{ userSelect: 'text' }}
             />
           </div>
@@ -242,7 +270,7 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
           </div>
           {item.address && <div className="item-address">{item.address}</div>}
           {item.memo && <div className="item-memo">{item.memo}</div>}
-          {item.cost && <div className="item-cost">{item.cost}</div>}
+          {item.cost && <div className="item-cost">{formatCostDisplay(item.cost)}</div>}
         </div>
         <div className="item-action-btns">
           <button className="item-icon-btn" onClick={enterEdit} title="편집">

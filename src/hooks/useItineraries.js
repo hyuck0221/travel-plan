@@ -9,17 +9,12 @@ const persist = (plans) => { try { localStorage.setItem(PLANS_KEY, JSON.stringif
 const getStoredActiveId = () => localStorage.getItem(ACTIVE_KEY)
 const setStoredActiveId = (id) => localStorage.setItem(ACTIVE_KEY, id)
 
-const readHash = () => {
+const writeHash = async (id, state) => {
   try {
-    const h = window.location.hash.slice(1)
-    if (!h) return null
-    const d = decodeState(h)
-    return (d && Array.isArray(d.items)) ? d : null
-  } catch { return null }
-}
-
-const writeHash = (id, state) => {
-  window.history.replaceState(null, '', '#' + encodeState({ id, title: state.title, items: state.items }))
+    const encoded = await encodeState({ id, title: state.title, items: state.items })
+    window.history.replaceState(null, '', '#' + encoded)
+    return encoded.length
+  } catch { return 0 }
 }
 
 const makePlan = (partial = {}) => {
@@ -30,50 +25,28 @@ const makePlan = (partial = {}) => {
     updatedAt: new Date().toISOString(),
     ...partial,
   }
-  // Guard: id must always be a valid string
   if (!plan.id) plan.id = crypto.randomUUID()
   return plan
 }
 
 function init() {
   let plans = load()
-  const hash = readHash()
+  // 해시는 async이므로 raw 문자열만 전달, 처리는 mount 후 useEffect에서
+  const pendingHash = window.location.hash.slice(1) || null
 
-  if (hash) {
-    if (hash.id && plans.some(p => p.id === hash.id)) {
-      // Hash matches existing plan — sync and activate
-      plans = plans.map(p => p.id === hash.id
-        ? { ...p, title: hash.title ?? p.title, items: hash.items, updatedAt: new Date().toISOString() }
-        : p
-      )
-      persist(plans)
-      setStoredActiveId(hash.id)
-      return { plans, activeId: hash.id, initialState: { title: hash.title ?? '', items: hash.items } }
-    }
-    if (hash.id) {
-      // Shared link (ID not in localStorage) → create new plan from hash
-      const shared = makePlan({ id: hash.id, title: hash.title ?? '', items: hash.items })
-      plans = [shared, ...plans]
-      persist(plans)
-      setStoredActiveId(shared.id)
-      return { plans, activeId: shared.id, initialState: { title: shared.title, items: shared.items } }
-    }
-  }
-
-  // No hash or hash without valid id — use stored active plan
   if (plans.length === 0) {
     const first = makePlan()
     plans = [first]
     persist(plans)
     setStoredActiveId(first.id)
-    return { plans, activeId: first.id, initialState: { title: '', items: [] } }
+    return { plans, activeId: first.id, initialState: { title: '', items: [] }, pendingHash }
   }
 
   const savedId = getStoredActiveId()
   const activeId = (savedId && plans.some(p => p.id === savedId)) ? savedId : plans[0].id
   setStoredActiveId(activeId)
   const active = plans.find(p => p.id === activeId)
-  return { plans, activeId, initialState: { title: active?.title ?? '', items: active?.items ?? [] } }
+  return { plans, activeId, initialState: { title: active?.title ?? '', items: active?.items ?? [] }, pendingHash }
 }
 
 // Undo/redo reducer
@@ -88,20 +61,65 @@ function histReducer(s, action) {
 }
 
 export function useItineraries() {
-  const [{ plans: ip, activeId: iai, initialState: is }] = useState(init)
+  const [{ plans: ip, activeId: iai, initialState: is, pendingHash }] = useState(init)
 
   const [plans, setPlans] = useState(ip)
   const [activeId, setActiveId] = useState(iai)
   const [hist, dispatch] = useReducer(histReducer, null, () => ({ stack: [is], idx: 0 }))
+  const [conflictData, setConflictData] = useState(null)
+  const [urlLength, setUrlLength] = useState(0)
 
   const state = hist.stack[hist.idx]
 
-  // Sync active plan to localStorage + URL hash.
-  // Uses functional setPlans so we always work with the latest plans state,
-  // without adding plans to deps (which would cause an infinite loop).
+  // mount 후 해시 async 처리
+  useEffect(() => {
+    if (!pendingHash) return
+    decodeState(pendingHash).then(hash => {
+      if (!hash || !Array.isArray(hash.items)) return
+      const currentPlans = load()
+      const existingPlan = currentPlans.find(p => p.id === hash.id)
+
+      if (existingPlan) {
+        // 내용이 동일하면 조용히 활성화 (재로드 시나리오)
+        // ID뿐 아니라 실제 필드 값까지 비교 (수정 감지)
+        const isSame =
+          existingPlan.title === (hash.title ?? '') &&
+          existingPlan.items.length === hash.items.length &&
+          hash.items.every(hashItem => {
+            const stored = existingPlan.items.find(i => i.id === hashItem.id)
+            return stored != null &&
+              (stored.destination || '') === (hashItem.destination || '') &&
+              (stored.address || '') === (hashItem.address || '') &&
+              (stored.date || '') === (hashItem.date || '') &&
+              (stored.time || '') === (hashItem.time || '') &&
+              (stored.memo || '') === (hashItem.memo || '')
+          })
+
+        if (isSame) {
+          setActiveId(hash.id)
+          setStoredActiveId(hash.id)
+          dispatch({ type: 'RESET', payload: { title: existingPlan.title, items: existingPlan.items } })
+        } else {
+          // 내용 다름 → 충돌 다이얼로그
+          setConflictData({ fromHash: hash, existing: existingPlan })
+        }
+      } else if (hash.id) {
+        // 새 공유 링크 → 자동 추가
+        const shared = makePlan({ id: hash.id, title: hash.title ?? '', items: hash.items })
+        const updated = [shared, ...currentPlans]
+        persist(updated)
+        setPlans(updated)
+        setActiveId(shared.id)
+        setStoredActiveId(shared.id)
+        dispatch({ type: 'RESET', payload: { title: shared.title, items: shared.items } })
+      }
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync active plan to localStorage + URL hash
   useEffect(() => {
     if (!activeId) return
-    writeHash(activeId, state)
+    writeHash(activeId, state).then(len => setUrlLength(len))
     setPlans(prev => {
       const updated = prev.map(p =>
         p.id === activeId
@@ -130,7 +148,32 @@ export function useItineraries() {
     dispatch({ type: 'PUSH', payload: newState })
   }, [])
 
-  // Plan management — plans state is the source of truth, no load() calls
+  const resolveConflict = useCallback((overwrite) => {
+    if (!conflictData) return
+    const { fromHash, existing } = conflictData
+    if (overwrite) {
+      setPlans(prev => {
+        const updated = prev.map(p => p.id === fromHash.id
+          ? { ...p, title: fromHash.title ?? p.title, items: fromHash.items, updatedAt: new Date().toISOString() }
+          : p
+        )
+        persist(updated)
+        return updated
+      })
+      setActiveId(fromHash.id)
+      setStoredActiveId(fromHash.id)
+      dispatch({ type: 'RESET', payload: { title: fromHash.title ?? '', items: fromHash.items } })
+    } else {
+      // 취소 — 기존 유지, URL 해시 정리
+      setActiveId(existing.id)
+      setStoredActiveId(existing.id)
+      dispatch({ type: 'RESET', payload: { title: existing.title, items: existing.items } })
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+    setConflictData(null)
+  }, [conflictData])
+
+  // Plan management
   const createPlan = useCallback(() => {
     const plan = makePlan()
     setPlans(prev => {
@@ -171,7 +214,7 @@ export function useItineraries() {
       id: crypto.randomUUID(),
       date: '', time: '', destination: '', address: '', memo: '',
       lat: null, lng: null,
-      order: Date.now(),  // 날짜 미정 항목의 순서 관리용
+      order: Date.now(),
       cost: '', category: '',
       ...item,
     }
@@ -181,7 +224,6 @@ export function useItineraries() {
 
   const updateItem = useCallback((id, updates) => {
     const processedUpdates = { ...updates }
-    // 날짜가 지워질 때 → 목록 맨 끝으로 초기화
     if ('date' in updates && !updates.date && !('order' in updates)) {
       const currentItem = state.items.find(i => i.id === id)
       if (currentItem?.date) processedUpdates.order = Date.now()
@@ -210,5 +252,8 @@ export function useItineraries() {
     createPlan,
     deletePlan,
     switchPlan,
+    conflictData,
+    resolveConflict,
+    isUrlLimitReached: urlLength > 3000,
   }
 }

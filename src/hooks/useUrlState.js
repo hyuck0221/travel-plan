@@ -1,46 +1,67 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { encodeState, decodeState } from '../utils/urlEncoder'
 
 const DEFAULT_STATE = { title: '', items: [] }
 
-function readFromHash() {
-  const hash = window.location.hash.slice(1)
-  if (!hash) return DEFAULT_STATE
-  const decoded = decodeState(hash)
-  if (!decoded || typeof decoded !== 'object') return DEFAULT_STATE
-  if (!Array.isArray(decoded.items)) return DEFAULT_STATE
-  return { title: decoded.title || '', items: decoded.items }
-}
-
-function writeToHash(state) {
-  window.history.replaceState(null, '', '#' + encodeState(state))
-}
-
 export function useUrlState() {
-  const [history, setHistory] = useState(() => [readFromHash()])
+  const [history, setHistory] = useState([DEFAULT_STATE])
   const [historyIndex, setHistoryIndex] = useState(0)
-
+  const [isLoaded, setIsLoaded] = useState(false)
+  
   const state = history[historyIndex]
 
+  // Initialize from Hash
+  useEffect(() => {
+    const init = async () => {
+      const hash = window.location.hash.slice(1)
+      if (!hash) {
+        setIsLoaded(true)
+        return
+      }
+      const decoded = await decodeState(hash)
+      if (decoded && typeof decoded === 'object' && Array.isArray(decoded.items)) {
+        setHistory([decoded])
+      }
+      setIsLoaded(true)
+    }
+    init()
+  }, [])
+
+  // Helper: Write to URL
+  const updateUrl = useCallback(async (newState) => {
+    try {
+      const encoded = await encodeState(newState)
+      if (typeof encoded === 'string' && !encoded.includes('[object Promise]')) {
+        window.history.replaceState(null, '', '#' + encoded)
+      } else {
+        console.error('Invalid encoded state:', encoded)
+      }
+    } catch (e) {
+      console.error('Failed to update URL:', e)
+    }
+  }, [])
+
   const writeState = useCallback((newState) => {
-    writeToHash(newState)
     setHistory(prev => [...prev.slice(0, historyIndex + 1), newState])
     setHistoryIndex(prev => prev + 1)
-  }, [historyIndex])
+    updateUrl(newState)
+  }, [historyIndex, updateUrl])
 
   const undo = useCallback(() => {
     if (historyIndex <= 0) return
     const idx = historyIndex - 1
-    writeToHash(history[idx])
+    const targetState = history[idx]
     setHistoryIndex(idx)
-  }, [history, historyIndex])
+    updateUrl(targetState)
+  }, [history, historyIndex, updateUrl])
 
   const redo = useCallback(() => {
     if (historyIndex >= history.length - 1) return
     const idx = historyIndex + 1
-    writeToHash(history[idx])
+    const targetState = history[idx]
     setHistoryIndex(idx)
-  }, [history, historyIndex])
+    updateUrl(targetState)
+  }, [history, historyIndex, updateUrl])
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -87,6 +108,7 @@ export function useUrlState() {
   return {
     title: state.title,
     items: state.items,
+    isLoaded,
     addItem, updateItem, deleteItem, reorderItems, setTitle,
     canUndo: historyIndex > 0,
     canRedo: historyIndex < history.length - 1,

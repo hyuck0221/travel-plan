@@ -76,6 +76,30 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 /* ==========================================
    Header
    ========================================== */
+.app-header-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.limit-warning-bar {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 6px 20px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-bottom: 1px solid #ffeeba;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -83,9 +107,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   padding: 12px 20px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
   box-shadow: var(--shadow-sm);
-  z-index: 100;
 }
 
 .header-left {
@@ -453,7 +475,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   font-size: 14px;
 }
 
-.item-info { flex: 1; min-width: 0; }
+.item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .item-datetime {
   font-size: 11px;
@@ -488,13 +510,16 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   color: var(--color-text-secondary);
   margin-top: 4px;
   line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .item-cost {
   font-size: 11px;
-  color: var(--color-text-secondary);
-  text-align: right;
+  font-weight: 600;
+  color: var(--color-primary);
   margin-top: 4px;
+  align-self: flex-end;
 }
 
 .item-action-btns {
@@ -551,6 +576,11 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   outline: none;
   transition: border-color 0.15s;
   resize: none;
+}
+
+.form-row textarea {
+  resize: vertical;
+  min-height: 52px;
 }
 
 .form-row input:focus,
@@ -1428,3 +1458,95 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   border-radius: 3px;
 }
 .itinerary-panel::-webkit-scrollbar-thumb:hover { background: #c1c9d4; }
+
+/* ==========================================
+   Conflict Dialog
+   ========================================== */
+.conflict-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.conflict-dialog {
+  background: var(--color-surface);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 420px;
+  width: calc(100% - 40px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.conflict-dialog-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--color-text);
+}
+
+.conflict-dialog-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.conflict-plans {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.conflict-plan-card {
+  flex: 1;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.conflict-plan-card--incoming {
+  border-color: var(--color-primary);
+  background: rgba(79, 156, 249, 0.06);
+}
+
+.conflict-plan-label {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.conflict-plan-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conflict-plan-count {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.conflict-arrow {
+  font-size: 18px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.conflict-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

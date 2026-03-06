@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 
-export default function PlaceSearchInput({ value, onChange, onSelectResult, placeholder }) {
+export default function PlaceSearchInput({ value, onChange, onSelectResult, placeholder, autoFocus }) {
   const [results, setResults] = useState([])
   const [open, setOpen] = useState(false)
   const timeoutRef = useRef(null)
@@ -50,6 +50,7 @@ export default function PlaceSearchInput({ value, onChange, onSelectResult, plac
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         style={{ userSelect: 'text' }}
       />
       {open && results.length > 0 && (
