@@ -171,6 +171,8 @@ export function useItineraries() {
       id: crypto.randomUUID(),
       date: '', time: '', destination: '', address: '', memo: '',
       lat: null, lng: null,
+      order: Date.now(),  // 날짜 미정 항목의 순서 관리용
+      cost: '', category: '',
       ...item,
     }
     writeState({ ...state, items: [...state.items, newItem] })
@@ -178,7 +180,13 @@ export function useItineraries() {
   }, [state, writeState])
 
   const updateItem = useCallback((id, updates) => {
-    writeState({ ...state, items: state.items.map(i => i.id === id ? { ...i, ...updates } : i) })
+    const processedUpdates = { ...updates }
+    // 날짜가 지워질 때 → 목록 맨 끝으로 초기화
+    if ('date' in updates && !updates.date && !('order' in updates)) {
+      const currentItem = state.items.find(i => i.id === id)
+      if (currentItem?.date) processedUpdates.order = Date.now()
+    }
+    writeState({ ...state, items: state.items.map(i => i.id === id ? { ...i, ...processedUpdates } : i) })
   }, [state, writeState])
 
   const deleteItem = useCallback((id) => {

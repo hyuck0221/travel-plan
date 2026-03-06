@@ -16,7 +16,10 @@ export default function App() {
   } = useItineraries()
 
   const [activeItemId, setActiveItemId] = useState(null)
-  const [panelWidth, setPanelWidth] = useState(400)
+  const [panelWidth, setPanelWidth] = useState(() => {
+    const saved = localStorage.getItem('panel-width')
+    return saved ? Math.max(MIN_PANEL_WIDTH, parseInt(saved, 10)) : 400
+  })
   const draggingRef = useRef(false)
   const containerRef = useRef(null)
 
@@ -50,16 +53,19 @@ export default function App() {
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
 
+    let lastWidth = null
     const onMouseMove = (e) => {
       if (!draggingRef.current || !containerRef.current) return
       const left = containerRef.current.getBoundingClientRect().left
       const total = containerRef.current.offsetWidth
-      setPanelWidth(Math.min(Math.max(e.clientX - left, MIN_PANEL_WIDTH), total * MAX_PANEL_RATIO))
+      lastWidth = Math.min(Math.max(e.clientX - left, MIN_PANEL_WIDTH), total * MAX_PANEL_RATIO)
+      setPanelWidth(lastWidth)
     }
     const onMouseUp = () => {
       draggingRef.current = false
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
+      if (lastWidth !== null) localStorage.setItem('panel-width', String(Math.round(lastWidth)))
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
     }

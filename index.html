@@ -8,7 +8,27 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="text/javascript">
+      // [네이버 지도 500 에러 해결] URL이 너무 길면 인증 요청이 실패하므로, 로딩 시점에만 해시 제거
+      (function() {
+        window.__ORIGINAL_URL = window.location.href;
+        if (window.location.hash && window.location.hash.length > 300) {
+          // 1. 해시를 제외한 경로만으로 URL 변경 (Referer 헤더 세탁)
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      })();
+    </script>
+    
+    <!-- 네이버 지도 로드 (이 시점에 브라우저는 짧은 Referer를 전송함) -->
     <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=b7v8ylky86&submodules=geocoder"></script>
+    
+    <script type="text/javascript">
+      // 2. 지도 로드 직후 즉시 원래 긴 URL로 복구 (React가 실행되기 전)
+      if (window.__ORIGINAL_URL && window.location.href !== window.__ORIGINAL_URL) {
+        window.history.replaceState(null, '', window.__ORIGINAL_URL);
+      }
+    </script>
+
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -155,6 +155,17 @@ export const IconChevronDown = (p) => (
   <Icon {...p}><polyline points="6 9 12 15 18 9"/></Icon>
 )
 
+export const IconGrip = (p) => (
+  <Icon {...p}>
+    <circle cx="9" cy="8" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="15" cy="8" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="9" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="15" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="9" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+    <circle cx="15" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+  </Icon>
+)
+
 export const IconLoader = (p) => (
   <Icon {...p} className={`icon-spin ${p.className || ''}`}>
     <line x1="12" y1="2" x2="12" y2="6"/>

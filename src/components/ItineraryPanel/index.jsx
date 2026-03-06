@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Fragment } from 'react'
 import { IconPlus, IconMap, IconEdit } from '../Icons'
 import DateSection from './DateSection'
+import ItineraryItem from './ItineraryItem'
 
 function formatDate(d) {
   return d.replace(/-/g, '.')
@@ -16,10 +17,75 @@ function getDateRange(items) {
   return `${formatDate(min)} ~ ${formatDate(max)} (${days}일)`
 }
 
+function dateToSectionOrder(date) {
+  return Math.floor(new Date(date + 'T00:00:00Z').getTime() / 86400000)
+}
+
+function computeSections(items) {
+  const datedGroups = {}
+  const undatedItems = []
+
+  items.forEach(item => {
+    if (item.date) {
+      if (!datedGroups[item.date]) datedGroups[item.date] = []
+      datedGroups[item.date].push(item)
+    } else {
+      undatedItems.push(item)
+    }
+  })
+
+  Object.values(datedGroups).forEach(group => {
+    group.sort((a, b) => {
+      if (!a.time && b.time) return 1
+      if (a.time && !b.time) return -1
+      return (a.time || '').localeCompare(b.time || '')
+    })
+  })
+
+  const sections = []
+
+  Object.entries(datedGroups).forEach(([date, dateItems]) => {
+    sections.push({
+      type: 'date',
+      key: `date-${date}`,
+      date,
+      items: dateItems,
+      order: dateToSectionOrder(date),
+    })
+  })
+
+  undatedItems.forEach(item => {
+    sections.push({
+      type: 'undated',
+      key: `undated-${item.id}`,
+      item,
+      order: item.order ?? 1e13,
+    })
+  })
+
+  sections.sort((a, b) => a.order - b.order)
+  return sections
+}
+
+function DropZone({ isActive, onDragOver, onDragLeave, onDrop }) {
+  return (
+    <div
+      className={`dnd-drop-zone${isActive ? ' dnd-drop-zone--active' : ''}`}
+      onDragOver={e => { e.preventDefault(); onDragOver() }}
+      onDragLeave={onDragLeave}
+      onDrop={e => { e.preventDefault(); onDrop() }}
+    />
+  )
+}
+
 export default function ItineraryPanel({ items, title, onTitleChange, activeItemId, onUpdate, onDelete, onItemClick, onAddItem, style }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(title)
   const titleInputRef = useRef(null)
+
+  const [draggedItemId, setDraggedItemId] = useState(null)
+  const [dragOverZone, setDragOverZone] = useState(null)
+  const [editingItemId, setEditingItemId] = useState(null)
 
   useEffect(() => { setTitleDraft(title) }, [title])
 
@@ -38,25 +104,49 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
   }
 
   const dateRange = getDateRange(items)
+  const sections = computeSections(items)
+  const isDragging = draggedItemId !== null
 
-  const groups = {}
-  const dateOrder = []
-  items.forEach(item => {
-    const key = item.date || ''
-    if (!groups[key]) { groups[key] = []; dateOrder.push(key) }
-    groups[key].push(item)
-  })
+  const handleDragStart = (itemId, e) => {
+    e.dataTransfer.effectAllowed = 'move'
+    // 브라우저가 ghost 이미지를 캡처한 후 state 업데이트
+    setTimeout(() => setDraggedItemId(itemId), 0)
+  }
 
-  // 각 날짜 그룹 내에서 시간 오름차순 정렬 (시간 없는 항목은 마지막)
-  Object.values(groups).forEach(group => {
-    group.sort((a, b) => {
-      if (!a.time && b.time) return 1
-      if (a.time && !b.time) return -1
-      return (a.time || '').localeCompare(b.time || '')
-    })
-  })
+  const handleDragEnd = () => {
+    setDraggedItemId(null)
+    setDragOverZone(null)
+  }
 
-  const sortedDates = dateOrder.filter(d => d !== '').sort().concat(dateOrder.includes('') ? [''] : [])
+  const handleDrop = (zoneIdx) => {
+    if (!draggedItemId) return
+
+    // drop zone 앞뒤의 섹션 order 계산 (드래그 중인 항목 제외)
+    const beforeZone = sections
+      .slice(0, zoneIdx)
+      .filter(s => s.type === 'date' || s.item.id !== draggedItemId)
+    const afterZone = sections
+      .slice(zoneIdx)
+      .filter(s => s.type === 'date' || s.item.id !== draggedItemId)
+
+    const prevOrder = beforeZone.length > 0 ? beforeZone[beforeZone.length - 1].order : null
+    const nextOrder = afterZone.length > 0 ? afterZone[0].order : null
+
+    let newOrder
+    if (prevOrder === null && nextOrder === null) {
+      newOrder = 100000
+    } else if (prevOrder === null) {
+      newOrder = nextOrder - 0.5
+    } else if (nextOrder === null) {
+      newOrder = prevOrder + 0.5
+    } else {
+      newOrder = (prevOrder + nextOrder) / 2
+    }
+
+    onUpdate(draggedItemId, { order: newOrder })
+    setDraggedItemId(null)
+    setDragOverZone(null)
+  }
 
   return (
     <aside className="itinerary-panel" style={style}>
@@ -107,17 +197,55 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
         </div>
       ) : (
         <div className="date-groups">
-          {sortedDates.map(date => (
-            <DateSection
-              key={date || '__no_date__'}
-              date={date}
-              items={groups[date]}
-              activeItemId={activeItemId}
-              onUpdate={onUpdate}
-              onDelete={onDelete}
-              onItemClick={onItemClick}
-              onAddItem={onAddItem}
+          {isDragging && (
+            <DropZone
+              isActive={dragOverZone === 0}
+              onDragOver={() => setDragOverZone(0)}
+              onDragLeave={() => setDragOverZone(null)}
+              onDrop={() => handleDrop(0)}
             />
+          )}
+          {sections.map((section, idx) => (
+            <Fragment key={section.key}>
+              {section.type === 'date' ? (
+                <DateSection
+                  date={section.date}
+                  items={section.items}
+                  activeItemId={activeItemId}
+                  onUpdate={onUpdate}
+                  onDelete={onDelete}
+                  onItemClick={onItemClick}
+                  onAddItem={onAddItem}
+                />
+              ) : (
+                <div
+                  className={`undated-item-container${draggedItemId === section.item.id ? ' undated-item-container--dragging' : ''}`}
+                  draggable={editingItemId !== section.item.id}
+                  onDragStart={(e) => handleDragStart(section.item.id, e)}
+                  onDragEnd={handleDragEnd}
+                >
+                  <ItineraryItem
+                    item={section.item}
+                    isActive={activeItemId === section.item.id}
+                    isDraggable
+                    onUpdate={onUpdate}
+                    onDelete={onDelete}
+                    onClick={onItemClick}
+                    onEditingChange={(isEditing) =>
+                      setEditingItemId(isEditing ? section.item.id : null)
+                    }
+                  />
+                </div>
+              )}
+              {isDragging && (
+                <DropZone
+                  isActive={dragOverZone === idx + 1}
+                  onDragOver={() => setDragOverZone(idx + 1)}
+                  onDragLeave={() => setDragOverZone(null)}
+                  onDrop={() => handleDrop(idx + 1)}
+                />
+              )}
+            </Fragment>
           ))}
         </div>
       )}

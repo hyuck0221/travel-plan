@@ -1,8 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { IconEdit, IconTrash, IconPin } from '../Icons'
+import { IconEdit, IconTrash, IconPin, IconGrip } from '../Icons'
 import DatePicker from '../DatePicker'
 import TimePicker from '../TimePicker'
 import PlaceSearchInput from '../PlaceSearchInput'
+
+const CATEGORIES = [
+  { key: 'hotel',      emoji: '🏨', label: '숙소' },
+  { key: 'restaurant', emoji: '🍽️', label: '식당' },
+  { key: 'cafe',       emoji: '☕', label: '카페' },
+  { key: 'attraction', emoji: '🏛️', label: '관광지' },
+  { key: 'shopping',   emoji: '🛍️', label: '쇼핑' },
+  { key: 'transport',  emoji: '🚌', label: '교통' },
+  { key: 'activity',   emoji: '🎡', label: '액티비티' },
+  { key: 'nature',     emoji: '🌿', label: '자연' },
+]
+
+const categoryEmoji = Object.fromEntries(CATEGORIES.map(c => [c.key, c.emoji]))
 
 function formatDisplayDate(d) {
   if (!d) return null
@@ -10,12 +23,14 @@ function formatDisplayDate(d) {
   return `${y}.${m}.${day}`
 }
 
-export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onClick }) {
+export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onClick, isDraggable, onEditingChange }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
     date: item.date, time: item.time,
     destination: item.destination, address: item.address, memo: item.memo,
     lat: item.lat, lng: item.lng,
+    cost: item.cost || '',
+    category: item.category || '',
   })
   const [showDate, setShowDate] = useState(false)
   const [showTime, setShowTime] = useState(false)
@@ -33,24 +48,29 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
         date: item.date, time: item.time,
         destination: item.destination, address: item.address, memo: item.memo,
         lat: item.lat, lng: item.lng,
+        cost: item.cost || '',
+        category: item.category || '',
       })
     }
   }, [item, editing])
 
-  const handleSave = () => { onUpdate(item.id, form); setEditing(false) }
+  const handleSave = () => { onUpdate(item.id, form); setEditing(false); onEditingChange?.(false) }
 
   const handleCancel = () => {
     setForm({
       date: item.date, time: item.time,
       destination: item.destination, address: item.address, memo: item.memo,
       lat: item.lat, lng: item.lng,
+      cost: item.cost || '',
+      category: item.category || '',
     })
     setShowDate(false)
     setShowTime(false)
     setEditing(false)
+    onEditingChange?.(false)
   }
 
-  const enterEdit = (e) => { e.stopPropagation(); setEditing(true) }
+  const enterEdit = (e) => { e.stopPropagation(); setEditing(true); onEditingChange?.(true) }
 
   const markerLabel = item.markerNumber != null
     ? <span className="marker-badge">{item.markerNumber}</span>
@@ -106,6 +126,24 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
             />
           )}
 
+          {/* 카테고리 */}
+          <div className="category-row" style={{ marginTop: 6 }}>
+            <span className="field-toggle-label">카테고리</span>
+            <div className="category-picker">
+              {CATEGORIES.map(({ key, emoji, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`category-btn${form.category === key ? ' category-btn--active' : ''}`}
+                  title={label}
+                  onClick={() => setForm(f => ({ ...f, category: f.category === key ? '' : key }))}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* 장소 */}
           <div className="form-row" style={{ marginTop: 8 }}>
             <label>장소</label>
@@ -151,6 +189,18 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
             />
           </div>
 
+          {/* 경비 */}
+          <div className="form-row">
+            <label>경비</label>
+            <input
+              type="text"
+              value={form.cost}
+              placeholder="예: ₩50,000"
+              onChange={e => setForm(f => ({ ...f, cost: e.target.value }))}
+              style={{ userSelect: 'text' }}
+            />
+          </div>
+
           <div className="form-actions">
             <button className="btn btn-primary btn-sm" onClick={handleSave}>저장</button>
             <button className="btn btn-secondary btn-sm" onClick={handleCancel}>취소</button>
@@ -168,7 +218,17 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
       onDoubleClick={enterEdit}
     >
       <div className="item-header">
-        <div className="item-marker">{markerLabel}</div>
+        {isDraggable && (
+          <div className="item-drag-handle">
+            <IconGrip size={14} />
+          </div>
+        )}
+        <div className="item-marker">
+          {markerLabel}
+          {item.category && (
+            <span className="item-category-badge">{categoryEmoji[item.category]}</span>
+          )}
+        </div>
         <div className="item-info">
           {(item.date || item.time) && (
             <div className="item-datetime">
@@ -182,6 +242,7 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
           </div>
           {item.address && <div className="item-address">{item.address}</div>}
           {item.memo && <div className="item-memo">{item.memo}</div>}
+          {item.cost && <div className="item-cost">{item.cost}</div>}
         </div>
         <div className="item-action-btns">
           <button className="item-icon-btn" onClick={enterEdit} title="편집">
