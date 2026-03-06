@@ -547,6 +547,17 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 
 .item-icon-btn--delete:hover { background: #fee2e2; }
 
+.item-icon-btn--naver {
+  color: #03C75A;
+  border: 1px solid #e1e4e8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+.item-icon-btn--naver:hover {
+  background-color: #03C75A;
+  color: white;
+  border-color: #03C75A;
+}
+
 /* Inline edit form */
 .item-edit-form { display: flex; flex-direction: column; gap: 8px; }
 

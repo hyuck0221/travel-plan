@@ -151,7 +151,9 @@ export function useItineraries() {
   const resolveConflict = useCallback((overwrite) => {
     if (!conflictData) return
     const { fromHash, existing } = conflictData
+    
     if (overwrite) {
+      // 덮어씌우기 — 해시 데이터로 로컬 업데이트
       setPlans(prev => {
         const updated = prev.map(p => p.id === fromHash.id
           ? { ...p, title: fromHash.title ?? p.title, items: fromHash.items, updatedAt: new Date().toISOString() }
@@ -164,11 +166,15 @@ export function useItineraries() {
       setStoredActiveId(fromHash.id)
       dispatch({ type: 'RESET', payload: { title: fromHash.title ?? '', items: fromHash.items } })
     } else {
-      // 취소 — 기존 유지, URL 해시 정리
+      // 취소 — 로컬에 이미 있던 기존 데이터 강제 로드 및 URL 정리
       setActiveId(existing.id)
       setStoredActiveId(existing.id)
       dispatch({ type: 'RESET', payload: { title: existing.title, items: existing.items } })
-      window.history.replaceState(null, '', window.location.pathname)
+      
+      // 중요: URL 해시를 즉시 제거하여 루프 방지 및 사용자 의도 반영
+      // SecurityError 방지를 위해 origin + pathname 조합 사용
+      const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
+      window.history.replaceState(null, '', cleanUrl);
     }
     setConflictData(null)
   }, [conflictData])

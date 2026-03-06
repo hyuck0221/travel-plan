@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { IconEdit, IconTrash, IconPin, IconGrip } from '../Icons'
+import { IconEdit, IconTrash, IconPin, IconGrip, IconNaver } from '../Icons'
 import DatePicker from '../DatePicker'
 import TimePicker from '../TimePicker'
 import PlaceSearchInput from '../PlaceSearchInput'
@@ -273,6 +273,26 @@ export default function ItineraryItem({ item, isActive, onUpdate, onDelete, onCl
           {item.cost && <div className="item-cost">{formatCostDisplay(item.cost)}</div>}
         </div>
         <div className="item-action-btns">
+          <button 
+            className="item-icon-btn item-icon-btn--naver" 
+            onClick={(e) => {
+              e.stopPropagation();
+              // 장소명과 주소를 조합하여 검색 정확도 극대화
+              let query = "";
+              if (item.destination && item.address) {
+                query = `${item.destination} ${item.address}`;
+              } else {
+                query = item.destination || item.address || `${item.lat},${item.lng}`;
+              }
+              
+              if (query) {
+                window.open(`https://map.naver.com/v5/search/${encodeURIComponent(query)}`, '_blank');
+              }
+            }} 
+            title="네이버 지도에서 보기"
+          >
+            <IconNaver size={14} />
+          </button>
           <button className="item-icon-btn" onClick={enterEdit} title="편집">
             <IconEdit size={14} />
           </button>

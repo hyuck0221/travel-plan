@@ -166,6 +166,12 @@ export const IconGrip = (p) => (
   </Icon>
 )
 
+export const IconNaver = (p) => (
+  <Icon size={14} viewBox="0 0 24 24" stroke="none" fill="currentColor" {...p}>
+    <path d="M16.2 4H20v16h-3.8l-8.4-12V20H4V4h3.8l8.4 12V4z"/>
+  </Icon>
+)
+
 export const IconLoader = (p) => (
   <Icon {...p} className={`icon-spin ${p.className || ''}`}>
     <line x1="12" y1="2" x2="12" y2="6"/>
