@@ -6,6 +6,7 @@ export default function SearchBar({ onSelectPlace }) {
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
   const timeoutRef = useRef(null)
   const wrapperRef = useRef(null)
 
@@ -16,6 +17,10 @@ export default function SearchBar({ onSelectPlace }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  useEffect(() => {
+    setSelectedIndex(-1)
+  }, [results])
 
   const search = async (q) => {
     if (!q.trim()) { setResults([]); setOpen(false); return }
@@ -65,7 +70,25 @@ export default function SearchBar({ onSelectPlace }) {
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') { clearTimeout(timeoutRef.current); search(query) }
+    if (e.key === 'Enter') {
+      if (open && results.length > 0 && selectedIndex >= 0) {
+        e.preventDefault()
+        handleSelect(results[selectedIndex])
+      } else {
+        clearTimeout(timeoutRef.current)
+        search(query)
+      }
+    } else if (open && results.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex((prev) => (prev + 1 >= results.length ? 0 : prev + 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex((prev) => (prev <= 0 ? results.length - 1 : prev - 1))
+      } else if (e.key === 'Escape') {
+        setOpen(false)
+      }
+    }
   }
 
   const handleSelect = (place) => {
@@ -92,7 +115,11 @@ export default function SearchBar({ onSelectPlace }) {
             <div className="search-no-results">검색 결과가 없습니다.</div>
           ) : (
             results.map((place, i) => (
-              <button key={i} className="search-result-item" onClick={() => handleSelect(place)}>
+              <button
+                key={i}
+                className={`search-result-item ${i === selectedIndex ? 'search-result-item--selected' : ''}`}
+                onClick={() => handleSelect(place)}
+              >
                 <div className="result-name">
                   {place.title}
                   {place.category && <span className="result-category">{place.category}</span>}

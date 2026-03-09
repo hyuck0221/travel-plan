@@ -775,7 +775,8 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 .place-result-item:last-child { border-bottom: none; }
-.place-result-item:hover { background: var(--color-active-bg); }
+.place-result-item:hover,
+.place-result-item--selected { background: var(--color-active-bg); }
 
 .place-result-name {
   display: block;
@@ -1122,7 +1123,8 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 
 .search-result-item:last-child { border-bottom: none; }
 
-.search-result-item:hover { background: var(--color-active-bg); }
+.search-result-item:hover,
+.search-result-item--selected { background: var(--color-active-bg); }
 
 .result-name {
   display: flex;

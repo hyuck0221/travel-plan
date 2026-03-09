@@ -41,6 +41,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
   })
   const [showDate, setShowDate] = useState(false)
   const [showTime, setShowTime] = useState(false)
+  const isSearchOpen = useRef(false)
   const itemRef = useRef(null)
 
   useEffect(() => {
@@ -98,7 +99,11 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
 
   const handleEditKeyDown = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); handleCancel() }
-    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); handleSave() }
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      if (isSearchOpen.current) return
+      e.preventDefault()
+      handleSave()
+    }
   }
 
   if (editing) {
@@ -178,6 +183,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
               onChange={val => setForm(f => ({ ...f, destination: val }))}
               placeholder="장소명"
               autoFocus
+              onOpenChange={open => isSearchOpen.current = open}
               onSelectResult={r => setForm(f => ({
                 ...f,
                 destination: r.title,
@@ -195,6 +201,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
               value={form.address}
               onChange={val => setForm(f => ({ ...f, address: val }))}
               placeholder="주소"
+              onOpenChange={open => isSearchOpen.current = open}
               onSelectResult={r => setForm(f => ({
                 ...f,
                 address: r.roadAddress || r.address || '',
