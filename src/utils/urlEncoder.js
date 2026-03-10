@@ -61,9 +61,9 @@ export async function encodeState(state) {
 
     // Items
     for (const i of encodedItems) {
-      // Lat/Lng (Float32 = 4 bytes each)
-      view.setFloat32(offset, i.lat || 0); offset += 4
-      view.setFloat32(offset, i.lng || 0); offset += 4
+      // Lat/Lng (Float32 = 4 bytes each), NaN = no coordinate
+      view.setFloat32(offset, i.lat != null ? i.lat : NaN); offset += 4
+      view.setFloat32(offset, i.lng != null ? i.lng : NaN); offset += 4
 
       // Strings
       const writeStr = (bytes) => {
@@ -194,7 +194,10 @@ export async function decodeState(encoded) {
           cost = readStr()
         }
 
-        items.push({ destination, address, lat, lng, memo, date, time, id, category, cost })
+        // NaN = no coordinate (new format); both 0,0 = legacy broken null (old format)
+        const latValue = isNaN(lat) || (lat === 0 && lng === 0) ? null : lat
+        const lngValue = isNaN(lng) || (lat === 0 && lng === 0) ? null : lng
+        items.push({ destination, address, lat: latValue, lng: lngValue, memo, date, time, id, category, cost })
       }
       return { id: planId, title, items }
     }
