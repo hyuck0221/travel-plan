@@ -30,7 +30,7 @@ function formatDisplayDate(d) {
   return `${y}.${m}.${day}`
 }
 
-export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onDelete, onClick, isDraggable, onEditingChange }) {
+export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onDelete, onClick, isDraggable, onEditingChange, isLocked }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
     date: item.date, time: item.time,
@@ -51,7 +51,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
   }, [isActive])
 
   useEffect(() => {
-    if (!isActive || editing) return
+    if (!isActive || editing || isLocked) return
     const handler = (e) => {
       if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
         e.preventDefault()
@@ -61,7 +61,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [isActive, editing, onEditingChange])
+  }, [isActive, editing, onEditingChange, isLocked])
 
   useEffect(() => {
     if (!editing) {
@@ -91,7 +91,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
     onEditingChange?.(false)
   }
 
-  const enterEdit = (e) => { e.stopPropagation(); setEditing(true); onEditingChange?.(true) }
+  const enterEdit = (e) => { if (isLocked) return; e.stopPropagation(); setEditing(true); onEditingChange?.(true) }
 
   const markerLabel = item.markerNumber != null
     ? <span className="marker-badge">{item.markerNumber}</span>
@@ -281,33 +281,35 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
           {item.cost && <div className="item-cost">{formatCostDisplay(item.cost)}</div>}
         </div>
         <div className="item-action-btns">
-          <button 
-            className="item-icon-btn item-icon-btn--naver" 
+          <button
+            className="item-icon-btn item-icon-btn--naver"
             onClick={(e) => {
               e.stopPropagation();
-              // 장소명과 주소를 조합하여 검색 정확도 극대화
               let query = "";
               if (item.destination && item.address && item.destination !== item.address) {
                 query = `${item.destination} ${item.address}`;
               } else {
                 query = item.destination || item.address || `${item.lat},${item.lng}`;
               }
-              
               if (query) {
                 window.open(`https://map.naver.com/v5/search/${encodeURIComponent(query)}`, '_blank');
               }
-            }} 
+            }}
             title="네이버 지도에서 보기"
           >
             <IconNaver size={14} />
           </button>
-          <button className="item-icon-btn" onClick={enterEdit} title="편집">
-            <IconEdit size={14} />
-          </button>
-          <button className="item-icon-btn item-icon-btn--delete"
-            onClick={e => { e.stopPropagation(); onDelete(item.id) }} title="삭제">
-            <IconTrash size={14} />
-          </button>
+          {!isLocked && (
+            <>
+              <button className="item-icon-btn" onClick={enterEdit} title="편집">
+                <IconEdit size={14} />
+              </button>
+              <button className="item-icon-btn item-icon-btn--delete"
+                onClick={e => { e.stopPropagation(); onDelete(item.id) }} title="삭제">
+                <IconTrash size={14} />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

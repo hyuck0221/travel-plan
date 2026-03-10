@@ -196,6 +196,15 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   background: var(--color-border);
 }
 
+.btn-lock--locked {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+.btn-lock--locked:hover {
+  background: #fde68a;
+}
+
 .btn-danger {
   background: var(--color-danger);
   color: white;
@@ -1664,6 +1673,19 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     transition: none !important;
   }
 
+  .panels--split .map-panel-wrapper {
+    order: 1;
+  }
+
+  .panels--split .itinerary-panel-wrapper {
+    order: 2;
+  }
+
+  /* 하단 플로팅 버튼에 가리지 않도록 스크롤 여유 공간 확보 */
+  .itinerary-panel {
+    padding-bottom: 100px;
+  }
+
   /* 모바일 컨트롤 전체 래퍼 */
   .mobile-controls {
     position: fixed;
@@ -1718,10 +1740,12 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     transition: border-radius 0.26s cubic-bezier(0.34, 1.4, 0.64, 1);
   }
 
-  /* 같이보기 버튼이 보일 때 pill 상단 모서리를 0으로 맞춤 */
+  /* 같이보기 버튼이 보일 때 pill 모서리를 같이보기 버튼(10px)과 맞춤 */
   .split-view-hint--visible + .mobile-view-switcher {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
   }
 
   .switcher-btn {

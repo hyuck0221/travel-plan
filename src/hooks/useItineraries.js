@@ -12,9 +12,17 @@ const setStoredActiveId = (id) => localStorage.setItem(ACTIVE_KEY, id)
 const writeHash = async (id, state) => {
   try {
     const encoded = await encodeState({ id, title: state.title, items: state.items })
-    window.history.replaceState(null, '', '#' + encoded)
+    window.history.replaceState(null, '', window.location.search + '#' + encoded)
     return encoded.length
   } catch { return 0 }
+}
+
+const updateLockParam = (locked) => {
+  const params = new URLSearchParams(window.location.search)
+  if (locked) params.set('locked', '1')
+  else params.delete('locked')
+  const search = params.toString() ? `?${params.toString()}` : ''
+  window.history.replaceState(null, '', `${window.location.pathname}${search}${window.location.hash}`)
 }
 
 const makePlan = (partial = {}) => {
@@ -22,6 +30,7 @@ const makePlan = (partial = {}) => {
     id: crypto.randomUUID(),
     title: '',
     items: [],
+    locked: false,
     updatedAt: new Date().toISOString(),
     ...partial,
   }
@@ -46,7 +55,7 @@ function init() {
   const activeId = (savedId && plans.some(p => p.id === savedId)) ? savedId : plans[0].id
   setStoredActiveId(activeId)
   const active = plans.find(p => p.id === activeId)
-  return { plans, activeId, initialState: { title: active?.title ?? '', items: active?.items ?? [] }, pendingHash }
+  return { plans, activeId, initialState: { title: active?.title ?? '', items: active?.items ?? [] }, pendingHash, initialLocked: active?.locked ?? false }
 }
 
 // Undo/redo reducer
@@ -61,13 +70,14 @@ function histReducer(s, action) {
 }
 
 export function useItineraries() {
-  const [{ plans: ip, activeId: iai, initialState: is, pendingHash }] = useState(init)
+  const [{ plans: ip, activeId: iai, initialState: is, pendingHash, initialLocked }] = useState(init)
 
   const [plans, setPlans] = useState(ip)
   const [activeId, setActiveId] = useState(iai)
   const [hist, dispatch] = useReducer(histReducer, null, () => ({ stack: [is], idx: 0 }))
   const [conflictData, setConflictData] = useState(null)
   const [urlLength, setUrlLength] = useState(0)
+  const [isLocked, setIsLocked] = useState(initialLocked)
 
   const state = hist.stack[hist.idx]
 
@@ -78,6 +88,8 @@ export function useItineraries() {
       if (!hash || !Array.isArray(hash.items)) return
       const currentPlans = load()
       const existingPlan = currentPlans.find(p => p.id === hash.id)
+
+      const urlLocked = new URLSearchParams(window.location.search).get('locked') === '1'
 
       if (existingPlan) {
         // 내용이 동일하면 조용히 활성화 (재로드 시나리오)
@@ -99,19 +111,23 @@ export function useItineraries() {
           setActiveId(hash.id)
           setStoredActiveId(hash.id)
           dispatch({ type: 'RESET', payload: { title: existingPlan.title, items: existingPlan.items } })
+          const locked = existingPlan.locked ?? false
+          setIsLocked(locked)
+          updateLockParam(locked)
         } else {
           // 내용 다름 → 충돌 다이얼로그
           setConflictData({ fromHash: hash, existing: existingPlan })
         }
       } else if (hash.id) {
-        // 새 공유 링크 → 자동 추가
-        const shared = makePlan({ id: hash.id, title: hash.title ?? '', items: hash.items })
+        // 새 공유 링크 → 자동 추가 (URL의 ?locked=1 상태 반영)
+        const shared = makePlan({ id: hash.id, title: hash.title ?? '', items: hash.items, locked: urlLocked })
         const updated = [shared, ...currentPlans]
         persist(updated)
         setPlans(updated)
         setActiveId(shared.id)
         setStoredActiveId(shared.id)
         dispatch({ type: 'RESET', payload: { title: shared.title, items: shared.items } })
+        setIsLocked(urlLocked)
       }
     }).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -190,6 +206,8 @@ export function useItineraries() {
     setActiveId(plan.id)
     setStoredActiveId(plan.id)
     dispatch({ type: 'RESET', payload: { title: '', items: [] } })
+    setIsLocked(false)
+    updateLockParam(false)
   }, [])
 
   const deletePlan = useCallback((id) => {
@@ -202,6 +220,9 @@ export function useItineraries() {
       setActiveId(next.id)
       setStoredActiveId(next.id)
       dispatch({ type: 'RESET', payload: { title: next.title, items: next.items } })
+      const locked = next.locked ?? false
+      setIsLocked(locked)
+      updateLockParam(locked)
     }
   }, [plans, activeId])
 
@@ -212,7 +233,23 @@ export function useItineraries() {
     setActiveId(id)
     setStoredActiveId(id)
     dispatch({ type: 'RESET', payload: { title: target.title, items: target.items } })
+    const locked = target.locked ?? false
+    setIsLocked(locked)
+    updateLockParam(locked)
   }, [plans, activeId])
+
+  const toggleLock = useCallback(() => {
+    setIsLocked(prev => {
+      const next = !prev
+      setPlans(prevPlans => {
+        const updated = prevPlans.map(p => p.id === activeId ? { ...p, locked: next } : p)
+        persist(updated)
+        return updated
+      })
+      updateLockParam(next)
+      return next
+    })
+  }, [activeId])
 
   // CRUD for items
   const addItem = useCallback((item) => {
@@ -261,5 +298,7 @@ export function useItineraries() {
     conflictData,
     resolveConflict,
     isUrlLimitReached: urlLength > 3000,
+    isLocked,
+    toggleLock,
   }
 }

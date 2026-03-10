@@ -78,7 +78,7 @@ function DropZone({ isActive, onDragOver, onDragLeave, onDrop }) {
   )
 }
 
-export default function ItineraryPanel({ items, title, onTitleChange, activeItemId, currentItemId, onUpdate, onDelete, onItemClick, onAddItem, style }) {
+export default function ItineraryPanel({ items, title, onTitleChange, activeItemId, currentItemId, onUpdate, onDelete, onItemClick, onAddItem, isLocked, style }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(title)
   const titleInputRef = useRef(null)
@@ -181,19 +181,25 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
       {/* Panel actions */}
       <div className="panel-top">
         <h3 className="panel-title">일정</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => onAddItem('')}>
-          <IconPlus size={14} /> 새 일정
-        </button>
+        {!isLocked && (
+          <button className="btn btn-primary btn-sm" onClick={() => onAddItem('')}>
+            <IconPlus size={14} /> 새 일정
+          </button>
+        )}
       </div>
 
       {items.length === 0 ? (
         <div className="panel-empty">
           <IconMap className="empty-icon" />
           <p>아직 일정이 없습니다.</p>
-          <p className="empty-sub">지도에서 장소를 검색하거나 아래 버튼으로 일정을 추가하세요.</p>
-          <button className="btn btn-primary" onClick={() => onAddItem('')}>
-            <IconPlus size={14} /> 첫 일정 추가하기
-          </button>
+          {!isLocked && (
+            <>
+              <p className="empty-sub">지도에서 장소를 검색하거나 아래 버튼으로 일정을 추가하세요.</p>
+              <button className="btn btn-primary" onClick={() => onAddItem('')}>
+                <IconPlus size={14} /> 첫 일정 추가하기
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="date-groups">
@@ -217,11 +223,12 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
                   onDelete={onDelete}
                   onItemClick={onItemClick}
                   onAddItem={onAddItem}
+                  isLocked={isLocked}
                 />
               ) : (
                 <div
                   className={`undated-item-container${draggedItemId === section.item.id ? ' undated-item-container--dragging' : ''}`}
-                  draggable={editingItemId !== section.item.id}
+                  draggable={!isLocked && editingItemId !== section.item.id}
                   onDragStart={(e) => handleDragStart(section.item.id, e)}
                   onDragEnd={handleDragEnd}
                 >
@@ -229,10 +236,11 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
                     item={section.item}
                     isActive={activeItemId === section.item.id}
                     isCurrent={currentItemId === section.item.id}
-                    isDraggable
+                    isDraggable={!isLocked}
                     onUpdate={onUpdate}
                     onDelete={onDelete}
                     onClick={onItemClick}
+                    isLocked={isLocked}
                     onEditingChange={(isEditing) =>
                       setEditingItemId(isEditing ? section.item.id : null)
                     }

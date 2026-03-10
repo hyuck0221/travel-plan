@@ -17,6 +17,7 @@ export default function App() {
     plans, activeId, createPlan, deletePlan, switchPlan,
     isUrlLimitReached,
     conflictData, resolveConflict,
+    isLocked, toggleLock,
   } = useItineraries()
 
   const [activeItemId, setActiveItemId] = useState(null)
@@ -125,6 +126,7 @@ export default function App() {
         plans={plans} activeId={activeId}
         onCreatePlan={createPlan} onDeletePlan={deletePlan} onSwitchPlan={switchPlan}
         isUrlLimitReached={isUrlLimitReached}
+        isLocked={isLocked} onToggleLock={toggleLock}
       />
       <div className={`panels${isMobile && viewMode === 'both' ? ' panels--split' : ''}`} ref={containerRef}>
         <div
@@ -137,6 +139,7 @@ export default function App() {
             currentItemId={currentItemId}
             onUpdate={updateItem} onDelete={deleteItem}
             onItemClick={handleItemClick} onAddItem={handleAddItem}
+            isLocked={isLocked}
           />
         </div>
         {!isMobile && <div className="panel-resizer" onMouseDown={handleResizerMouseDown} />}
@@ -145,6 +148,7 @@ export default function App() {
             items={numberedItems} activeItemId={activeItemId}
             onMarkerClick={handleMarkerClick} onRegisterPlace={handleRegisterPlace}
             tracking={tracking} onToggleTracking={setTracking}
+            isLocked={isLocked}
           />
         </div>
       </div>

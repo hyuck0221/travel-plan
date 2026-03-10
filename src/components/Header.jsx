@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import QRModal from './QRModal'
 import PlanSelector from './PlanSelector'
-import { IconPlane, IconUndo, IconRedo, IconLink, IconQR, IconShare, IconLoader } from './Icons'
+import { IconPlane, IconUndo, IconRedo, IconLink, IconQR, IconShare, IconLoader, IconLock, IconUnlock } from './Icons'
 
 // In-memory cache for the current session
 const shortenMemCache = new Map()
@@ -45,7 +45,7 @@ async function shortenUrl(url) {
 export default function Header({
   canUndo, canRedo, onUndo, onRedo,
   plans, activeId, onCreatePlan, onDeletePlan, onSwitchPlan,
-  isUrlLimitReached
+  isUrlLimitReached, isLocked, onToggleLock
 }) {
   const [qrOpen, setQrOpen] = useState(false)
   const [qrImage, setQrImage] = useState(null)
@@ -136,19 +136,27 @@ export default function Header({
           />
 
           <div className="header-actions">
-            <button 
-              className="btn btn-secondary" 
-              onClick={handleCopyLink} 
-              disabled={!!loading} 
+            <button
+              className={`btn${isLocked ? ' btn-lock--locked' : ' btn-secondary'}`}
+              onClick={onToggleLock}
+              title={isLocked ? '잠금 해제' : '편집 잠금'}
+            >
+              {isLocked ? <IconLock /> : <IconUnlock />}
+              <span>{isLocked ? '잠금 해제' : '잠금'}</span>
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={handleCopyLink}
+              disabled={!!loading}
               title={isUrlLimitReached ? "전체 링크 복사" : "단축 링크 복사"}
             >
               {loading === 'shorten' ? <IconLoader /> : <IconLink />}
               <span>{isUrlLimitReached ? "링크 복사" : "링크 단축하여 복사"}</span>
             </button>
-            <button 
-              className="btn btn-secondary" 
-              onClick={handleQR} 
-              disabled={!!loading || isUrlLimitReached} 
+            <button
+              className="btn btn-secondary"
+              onClick={handleQR}
+              disabled={!!loading || isUrlLimitReached}
               title={isUrlLimitReached ? "용량 초과로 비활성" : "QR 코드 생성"}
             >
               {loading === 'qr' ? <IconLoader /> : <IconQR />}

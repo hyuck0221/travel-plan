@@ -134,7 +134,7 @@ function buildInfoWindowContent(destination, address, onRegister, onClose) {
     </div>`
 }
 
-export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace, tracking, onToggleTracking }) {
+export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace, tracking, onToggleTracking, isLocked }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
@@ -147,11 +147,28 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   const locationMarkerRef = useRef(null)
   const watchIdRef = useRef(null)
   const onRegisterRef = useRef(onRegisterPlace)
+  const isLockedRef = useRef(isLocked)
 
   useEffect(() => { onRegisterRef.current = onRegisterPlace }, [onRegisterPlace])
   useEffect(() => { itemsRef.current = items }, [items])
+  useEffect(() => {
+    isLockedRef.current = isLocked
+    if (isLocked) setPreviewPlace(null)
+  }, [isLocked])
 
   const [previewPlace, setPreviewPlace] = useState(null)
+
+  // 지도 컨테이너 크기 변경 감지 → 지도 리사이즈 트리거 (같이보기 전환 대응)
+  useEffect(() => {
+    if (!mapRef.current) return
+    const observer = new ResizeObserver(() => {
+      if (mapInstanceRef.current) {
+        window.naver.maps.Event.trigger(mapInstanceRef.current, 'resize')
+      }
+    })
+    observer.observe(mapRef.current)
+    return () => observer.disconnect()
+  }, [])
 
   // Initialize map
   useEffect(() => {
@@ -195,6 +212,8 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
           stackedInfoWindowRef.current.close()
           stackedInfoWindowRef.current = null
         }
+        if (isLockedRef.current) return
+
         const lat = e.coord.lat()
         const lng = e.coord.lng()
 
@@ -405,7 +424,9 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       mapInstanceRef.current.panTo(new window.naver.maps.LatLng(lat, lng))
       mapInstanceRef.current.setZoom(15)
     }
-    setPreviewPlace({ lat, lng, destination, address })
+    if (!isLocked) {
+      setPreviewPlace({ lat, lng, destination, address })
+    }
   }
 
   return (
