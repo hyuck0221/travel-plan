@@ -27,7 +27,7 @@ export async function encodeState(state) {
     const encoder = new TextEncoder()
     const titleBytes = encoder.encode(state.title || '')
     const items = state.items || []
-    
+
     // Calculate buffer size (roughly)
     let size = 1 + 1 + titleBytes.length + 16 + 2 // version(1) + titleLen(1) + title + planId(16) + itemCount(2)
     const encodedItems = items.map(item => {
@@ -36,9 +36,11 @@ export async function encodeState(state) {
       const memo = encoder.encode(item.memo || '')
       const date = encoder.encode(item.date || '') // YYYY-MM-DD (10 chars)
       const time = encoder.encode(item.time || '') // HH:mm (5 chars)
-      
-      size += 1 + dest.length + 1 + addr.length + 8 + 2 + memo.length + 1 + date.length + 1 + time.length + 16
-      return { dest, addr, memo, date, time, lat: item.lat, lng: item.lng, id: item.id }
+      const category = encoder.encode(item.category || '')
+      const cost = encoder.encode(item.cost || '')
+
+      size += 1 + dest.length + 1 + addr.length + 8 + 2 + memo.length + 1 + date.length + 1 + time.length + 16 + 1 + category.length + 1 + cost.length
+      return { dest, addr, memo, date, time, lat: item.lat, lng: item.lng, id: item.id, category, cost }
     })
 
     const buffer = new ArrayBuffer(size)
@@ -46,7 +48,7 @@ export async function encodeState(state) {
     let offset = 0
 
     // Header
-    view.setUint8(offset++, 2) // Version 2 (Binary)
+    view.setUint8(offset++, 3) // Version 3 (Binary + category + cost)
     view.setUint8(offset++, titleBytes.length)
     new Uint8Array(buffer, offset, titleBytes.length).set(titleBytes)
     offset += titleBytes.length
@@ -85,6 +87,8 @@ export async function encodeState(state) {
       writeStr(i.time)
       new Uint8Array(buffer, offset, 16).set(uuidToBytes(i.id))
       offset += 16
+      writeStr(i.category)
+      writeStr(i.cost)
     }
 
     // Slice to actual used size
@@ -146,22 +150,22 @@ export async function decodeState(encoded) {
     let offset = 0
     const version = view.getUint8(offset++)
 
-    if (version === 2) {
+    if (version === 2 || version === 3) {
       const titleLen = view.getUint8(offset++)
       const title = new TextDecoder().decode(new Uint8Array(buffer, offset, titleLen))
       offset += titleLen
-      
+
       const planId = bytesToUuid(new Uint8Array(buffer, offset, 16))
       offset += 16
-      
+
       const itemCount = view.getUint16(offset)
       offset += 2
-      
+
       const items = []
       for (let i = 0; i < itemCount; i++) {
         const lat = view.getFloat32(offset); offset += 4
         const lng = view.getFloat32(offset); offset += 4
-        
+
         const readStr = () => {
           const len = view.getUint8(offset++)
           const str = new TextDecoder().decode(new Uint8Array(buffer, offset, len))
@@ -174,7 +178,7 @@ export async function decodeState(encoded) {
           offset += len
           return str
         }
-        
+
         const destination = readStr()
         const address = readStr()
         const memo = readLongStr()
@@ -182,8 +186,15 @@ export async function decodeState(encoded) {
         const time = readStr()
         const id = bytesToUuid(new Uint8Array(buffer, offset, 16))
         offset += 16
-        
-        items.push({ destination, address, lat, lng, memo, date, time, id })
+
+        let category = ''
+        let cost = ''
+        if (version === 3) {
+          category = readStr()
+          cost = readStr()
+        }
+
+        items.push({ destination, address, lat, lng, memo, date, time, id, category, cost })
       }
       return { id: planId, title, items }
     }

@@ -21,6 +21,30 @@ function createMarkerIcon(number, active = false) {
   }
 }
 
+function createStackedMarkerIcon(numbers, active = false) {
+  const fill = active ? '#f97316' : '#4F9CF9'
+  const count = numbers.length
+  const label = count === 2
+    ? `${numbers[0]}·${numbers[1]}`
+    : `${numbers[0]}+${count - 1}`
+  // Wider pin (38px) with double stroke to signal "multiple items"
+  const svg = `
+    <svg width="38" height="44" viewBox="0 0 38 44" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19 0C10.163 0 3 7.163 3 16c0 10 16 28 16 28S35 26 35 16C35 7.163 27.837 0 19 0z"
+        fill="${fill}" stroke="white" stroke-width="3"/>
+      <path d="M19 0C10.163 0 3 7.163 3 16c0 10 16 28 16 28S35 26 35 16C35 7.163 27.837 0 19 0z"
+        fill="none" stroke="${fill}" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.6"/>
+      <circle cx="19" cy="16" r="11" fill="white"/>
+      <text x="19" y="21" text-anchor="middle" font-size="10" font-weight="bold"
+        fill="${fill}" font-family="Arial,sans-serif">${label}</text>
+    </svg>`
+  return {
+    content: svg,
+    size: new window.naver.maps.Size(38, 44),
+    anchor: new window.naver.maps.Point(19, 44),
+  }
+}
+
 const PREVIEW_SVG = `
   <svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg">
     <path d="M16 0C7.163 0 0 7.163 0 16c0 10 16 28 16 28S32 26 32 16C32 7.163 24.837 0 16 0z"
@@ -46,6 +70,39 @@ function parseReverseGeocode(response) {
     }
   }
   return ''
+}
+
+function buildStackedInfoWindowContent(group, onSelect, onClose) {
+  const F = `-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif`
+  const esc = s => (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  window.__stackedSelectItem = onSelect
+  window.__stackedClosePopup = onClose
+  const rows = group.map(item => `
+    <div onclick="window.__stackedSelectItem('${item.id}')"
+      style="padding:7px 8px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:8px;"
+      onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+      <span style="min-width:22px;height:22px;background:#4F9CF9;color:white;border-radius:50%;
+        display:inline-flex;align-items:center;justify-content:center;
+        font-size:11px;font-weight:700;flex-shrink:0;">${item.markerNumber}</span>
+      <div style="min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:#1a1a2e;white-space:nowrap;
+          overflow:hidden;text-overflow:ellipsis;">${esc(item.destination || '장소 미지정')}</div>
+        ${item.date || item.time ? `<div style="font-size:11px;color:#64748b;">${[item.date, item.time].filter(Boolean).join(' ')}</div>` : ''}
+      </div>
+    </div>
+  `).join('')
+  return `
+    <div style="background:white;border-radius:10px;padding:10px 10px 6px;
+      box-shadow:0 4px 20px rgba(0,0,0,0.18);min-width:180px;max-width:240px;font-family:${F};">
+      <div style="display:flex;justify-content:space-between;align-items:center;
+        margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #f1f5f9;">
+        <span style="font-size:11px;color:#64748b;">같은 위치 ${group.length}개 일정</span>
+        <button onclick="window.__stackedClosePopup()"
+          style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;
+          line-height:1;padding:0 2px;">×</button>
+      </div>
+      ${rows}
+    </div>`
 }
 
 function buildInfoWindowContent(destination, address, onRegister, onClose) {
@@ -77,7 +134,7 @@ function buildInfoWindowContent(destination, address, onRegister, onClose) {
     </div>`
 }
 
-export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace }) {
+export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace, tracking, onToggleTracking }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
@@ -86,6 +143,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   const itemsRef = useRef(items)
   const previewMarkerRef = useRef(null)
   const previewInfoWindowRef = useRef(null)
+  const stackedInfoWindowRef = useRef(null)
   const locationMarkerRef = useRef(null)
   const watchIdRef = useRef(null)
   const onRegisterRef = useRef(onRegisterPlace)
@@ -94,7 +152,6 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   useEffect(() => { itemsRef.current = items }, [items])
 
   const [previewPlace, setPreviewPlace] = useState(null)
-  const [tracking, setTracking] = useState(false)
 
   // Initialize map
   useEffect(() => {
@@ -132,8 +189,12 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
         )
       }
 
-      // Map click → preview pin with reverse geocode
+      // Map click → close stacked popup + preview pin with reverse geocode
       window.naver.maps.Event.addListener(map, 'click', (e) => {
+        if (stackedInfoWindowRef.current) {
+          stackedInfoWindowRef.current.close()
+          stackedInfoWindowRef.current = null
+        }
         const lat = e.coord.lat()
         const lng = e.coord.lng()
 
@@ -214,19 +275,69 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     if (!mapInstanceRef.current) return
     markersRef.current.forEach(m => m.setMap(null)); markersRef.current = []
     polylinesRef.current.forEach(p => p.setMap(null)); polylinesRef.current = []
+    if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
+    delete window.__stackedSelectItem
+    delete window.__stackedClosePopup
 
+    // Group items by coordinate to detect overlapping pins
+    const groups = {}
     items.forEach(item => {
       if (item.lat == null || item.lng == null || item.markerNumber == null) return
-      const isActive = item.id === activeItemId
-      const marker = new window.naver.maps.Marker({
-        position: new window.naver.maps.LatLng(item.lat, item.lng),
-        map: mapInstanceRef.current,
-        icon: createMarkerIcon(item.markerNumber, isActive),
-        title: item.destination || '',
-        zIndex: isActive ? 100 : 10,
-      })
-      window.naver.maps.Event.addListener(marker, 'click', () => onMarkerClick(item.id))
-      markersRef.current.push(marker)
+      const key = `${Number(item.lat).toFixed(6)},${Number(item.lng).toFixed(6)}`
+      if (!groups[key]) groups[key] = []
+      groups[key].push(item)
+    })
+
+    Object.values(groups).forEach(group => {
+      const pos = new window.naver.maps.LatLng(group[0].lat, group[0].lng)
+      const isActive = group.some(item => item.id === activeItemId)
+
+      if (group.length === 1) {
+        const item = group[0]
+        const marker = new window.naver.maps.Marker({
+          position: pos,
+          map: mapInstanceRef.current,
+          icon: createMarkerIcon(item.markerNumber, item.id === activeItemId),
+          title: item.destination || '',
+          zIndex: item.id === activeItemId ? 100 : 10,
+        })
+        window.naver.maps.Event.addListener(marker, 'click', () => onMarkerClick(item.id))
+        markersRef.current.push(marker)
+      } else {
+        // Overlapping pins: show stacked marker with popup on click
+        const numbers = group.map(i => i.markerNumber)
+        const marker = new window.naver.maps.Marker({
+          position: pos,
+          map: mapInstanceRef.current,
+          icon: createStackedMarkerIcon(numbers, isActive),
+          zIndex: isActive ? 100 : 15,
+        })
+        window.naver.maps.Event.addListener(marker, 'click', () => {
+          if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
+          const content = buildStackedInfoWindowContent(
+            group,
+            (id) => {
+              if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
+              onMarkerClick(id)
+            },
+            () => {
+              if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
+            }
+          )
+          const iw = new window.naver.maps.InfoWindow({
+            content,
+            borderWidth: 0,
+            backgroundColor: 'transparent',
+            disableAnchor: false,
+            anchorSize: new window.naver.maps.Size(12, 12),
+            anchorColor: 'white',
+            pixelOffset: new window.naver.maps.Point(0, -8),
+          })
+          iw.open(mapInstanceRef.current, marker)
+          stackedInfoWindowRef.current = iw
+        })
+        markersRef.current.push(marker)
+      }
     })
 
     const sorted = getSortedMarkerItems(items)
@@ -257,7 +368,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       return
     }
 
-    if (!navigator.geolocation) { setTracking(false); return }
+    if (!navigator.geolocation) { onToggleTracking(false); return }
 
     const dot = `<div style="width:14px;height:14px;position:relative;">
       <div style="position:absolute;inset:0;background:#ef4444;border-radius:50%;
@@ -280,7 +391,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
           mapInstanceRef.current.panTo(pos)
         }
       },
-      () => setTracking(false),
+      () => onToggleTracking(false),
       { enableHighAccuracy: true, maximumAge: 3000 }
     )
 
@@ -301,10 +412,10 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     <div className="map-panel">
       <SearchBar onSelectPlace={handleSelectPlace} />
       <div id="naver-map" ref={mapRef} />
-      <div className="map-controls">
+      <div className="map-controls map-controls--desktop">
         <button
           className={`map-control-btn${tracking ? ' map-control-btn--active' : ''}`}
-          onClick={() => setTracking(v => !v)}
+          onClick={() => onToggleTracking(v => !v)}
           title={tracking ? '현위치 표시 끄기' : '현위치 표시'}
         >
           <IconLocation size={18} />

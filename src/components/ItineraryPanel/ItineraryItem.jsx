@@ -287,7 +287,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
               e.stopPropagation();
               // 장소명과 주소를 조합하여 검색 정확도 극대화
               let query = "";
-              if (item.destination && item.address) {
+              if (item.destination && item.address && item.destination !== item.address) {
                 query = `${item.destination} ${item.address}`;
               } else {
                 query = item.destination || item.address || `${item.lat},${item.lng}`;

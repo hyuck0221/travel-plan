@@ -3,7 +3,7 @@ import Header from './components/Header'
 import ItineraryPanel from './components/ItineraryPanel'
 import MapPanel from './components/MapPanel'
 import ConflictDialog from './components/ConflictDialog'
-import { IconMap, IconCalendar } from './components/Icons'
+import { IconMap, IconCalendar, IconLocation } from './components/Icons'
 import { useItineraries } from './hooks/useItineraries'
 import { computeNumberedItems } from './utils/markerNumbers'
 
@@ -25,7 +25,8 @@ export default function App() {
     return saved ? Math.max(MIN_PANEL_WIDTH, parseInt(saved, 10)) : 400
   })
   const [viewMode, setViewMode] = useState('list') // 'list' or 'map'
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768)
+  const [tracking, setTracking] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
   
   const draggingRef = useRef(false)
@@ -140,25 +141,34 @@ export default function App() {
           <MapPanel
             items={numberedItems} activeItemId={activeItemId}
             onMarkerClick={handleMarkerClick} onRegisterPlace={handleRegisterPlace}
+            tracking={tracking} onToggleTracking={setTracking}
           />
         </div>
       </div>
       
       {isMobile && (
         <div className="mobile-view-switcher">
-          <button 
+          <button
             className={`switcher-btn ${viewMode === 'list' ? 'switcher-btn--active' : ''}`}
             onClick={() => setViewMode('list')}
           >
             <IconCalendar size={16} />
             일정
           </button>
-          <button 
+          <button
             className={`switcher-btn ${viewMode === 'map' ? 'switcher-btn--active' : ''}`}
             onClick={() => setViewMode('map')}
           >
             <IconMap size={16} />
             지도
+          </button>
+          <button
+            className={`switcher-btn switcher-location-btn${viewMode === 'map' ? ' switcher-location-btn--visible' : ''}${tracking ? ' switcher-btn--active' : ''}`}
+            onClick={() => setTracking(v => !v)}
+            title={tracking ? '현위치 표시 끄기' : '현위치 표시'}
+            tabIndex={viewMode === 'map' ? 0 : -1}
+          >
+            <IconLocation size={16} />
           </button>
         </div>
       )}

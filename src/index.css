@@ -1319,7 +1319,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   min-width: 0;
 }
 
-.plan-item-body:hover { background: var(--color-active-bg); }
+.plan-item-body:hover { background: none; }
 
 .plan-item-check {
   width: 16px;
@@ -1353,15 +1353,18 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 .plan-item-delete {
-  padding: 8px 10px;
+  padding: 0 10px;
   color: var(--color-text-secondary);
   flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
   transition: color 0.1s, background 0.1s;
 }
 
 .plan-item-delete:hover {
-  color: var(--color-danger);
-  background: #fee2e2;
+  color: white;
+  background: var(--color-danger);
 }
 
 .plan-create-btn {
@@ -1635,7 +1638,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     position: absolute;
     top: 0;
     left: 0;
-    transition: transform 0.3s ease-out, visibility 0.3s;
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.32s;
   }
 
   .itinerary-panel--hidden, .map-panel--hidden {
@@ -1643,7 +1646,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     pointer-events: none;
     transform: translateX(100%);
   }
-  
+
   .itinerary-panel--hidden { transform: translateX(-100%); }
 
   .mobile-view-switcher {
@@ -1677,13 +1680,32 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     color: white;
   }
 
+  .switcher-location-btn {
+    padding: 8px 0;
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      max-width 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
+      padding   0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
+      opacity   0.18s ease;
+  }
+
+  .switcher-location-btn--visible {
+    max-width: 52px;
+    padding: 8px 12px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .search-bar-wrapper {
     top: 8px;
     width: calc(100% - 16px);
   }
 
-  .map-controls {
-    bottom: 80px; /* Adjust for switcher */
+  .map-controls--desktop {
+    display: none;
   }
 
   /* Make action buttons visible on touch */
@@ -1719,5 +1741,9 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 @media (min-width: 769px) {
   .mobile-view-switcher {
     display: none;
+  }
+
+  .map-controls--desktop {
+    display: flex;
   }
 }

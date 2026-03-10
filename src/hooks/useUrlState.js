@@ -80,6 +80,7 @@ export function useUrlState() {
       id: crypto.randomUUID(),
       date: '', time: '', destination: '', address: '', memo: '',
       lat: null, lng: null,
+      category: '', cost: '',
       ...item,
     }
     writeState({ ...state, items: [...state.items, newItem] })
