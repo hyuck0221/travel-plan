@@ -73,8 +73,8 @@ export default function App() {
 
   const handleMarkerClick = useCallback((id) => {
     setActiveItemId(id)
-    if (isMobile) setViewMode('list')
-  }, [isMobile])
+    if (isMobile && viewMode !== 'both') setViewMode('list')
+  }, [isMobile, viewMode])
 
   const handleItemClick = useCallback((id) => {
     setActiveItemId(prev => prev === id ? null : id)
@@ -126,8 +126,11 @@ export default function App() {
         onCreatePlan={createPlan} onDeletePlan={deletePlan} onSwitchPlan={switchPlan}
         isUrlLimitReached={isUrlLimitReached}
       />
-      <div className="panels" ref={containerRef}>
-        <div className={`itinerary-panel-wrapper ${isMobile && viewMode !== 'list' ? 'itinerary-panel--hidden' : ''}`} style={!isMobile ? { width: panelWidth } : {}}>
+      <div className={`panels${isMobile && viewMode === 'both' ? ' panels--split' : ''}`} ref={containerRef}>
+        <div
+          className={`itinerary-panel-wrapper${isMobile && viewMode === 'map' ? ' itinerary-panel--hidden' : ''}`}
+          style={!isMobile ? { width: panelWidth } : {}}
+        >
           <ItineraryPanel
             items={numberedItems} title={title} onTitleChange={setTitle}
             activeItemId={activeItemId}
@@ -137,7 +140,7 @@ export default function App() {
           />
         </div>
         {!isMobile && <div className="panel-resizer" onMouseDown={handleResizerMouseDown} />}
-        <div className={`map-panel-wrapper ${isMobile && viewMode !== 'map' ? 'map-panel--hidden' : ''}`}>
+        <div className={`map-panel-wrapper${isMobile && viewMode === 'list' ? ' map-panel--hidden' : ''}`}>
           <MapPanel
             items={numberedItems} activeItemId={activeItemId}
             onMarkerClick={handleMarkerClick} onRegisterPlace={handleRegisterPlace}
@@ -145,33 +148,42 @@ export default function App() {
           />
         </div>
       </div>
-      
-      {isMobile && (
-        <div className="mobile-view-switcher">
-          <button
-            className={`switcher-btn ${viewMode === 'list' ? 'switcher-btn--active' : ''}`}
-            onClick={() => setViewMode('list')}
-          >
-            <IconCalendar size={16} />
-            일정
-          </button>
-          <button
-            className={`switcher-btn ${viewMode === 'map' ? 'switcher-btn--active' : ''}`}
-            onClick={() => setViewMode('map')}
-          >
-            <IconMap size={16} />
-            지도
-          </button>
-          <button
-            className={`switcher-btn switcher-location-btn${viewMode === 'map' ? ' switcher-location-btn--visible' : ''}${tracking ? ' switcher-btn--active' : ''}`}
-            onClick={() => setTracking(v => !v)}
-            title={tracking ? '현위치 표시 끄기' : '현위치 표시'}
-            tabIndex={viewMode === 'map' ? 0 : -1}
-          >
-            <IconLocation size={16} />
-          </button>
-        </div>
-      )}
+
+      {isMobile && (() => {
+        const locationVisible = viewMode === 'map' || viewMode === 'both'
+        const switcherState = viewMode === 'both' && tracking ? 'both-tracking'
+          : viewMode === 'both' ? 'both'
+          : viewMode === 'map' && tracking ? 'map-tracking'
+          : viewMode === 'map' ? 'map'
+          : 'list'
+        return (
+          <div className="mobile-controls">
+            {/* 같이보기 — 일정 탭일 때 pill 위에 가로로 넓게 등장 */}
+            <div className={`split-view-hint${viewMode === 'list' ? ' split-view-hint--visible' : ''}`}>
+              <button className="split-view-btn" onClick={() => setViewMode('both')}>
+                같이보기
+              </button>
+            </div>
+
+            <div className={`mobile-view-switcher mobile-view-switcher--${switcherState}`}>
+              <button className="switcher-btn switcher-btn--list" onClick={() => setViewMode('list')}>
+                <IconCalendar size={16} /> 일정
+              </button>
+              <button className="switcher-btn switcher-btn--map" onClick={() => setViewMode('map')}>
+                <IconMap size={16} /> 지도
+              </button>
+              <button
+                className={`switcher-btn switcher-location-btn${locationVisible ? ' switcher-location-btn--visible' : ''}`}
+                onClick={() => setTracking(v => !v)}
+                title={tracking ? '현위치 표시 끄기' : '현위치 표시'}
+                tabIndex={locationVisible ? 0 : -1}
+              >
+                <IconLocation size={16} />
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       <ConflictDialog conflictData={conflictData} onResolve={resolveConflict} />
     </div>

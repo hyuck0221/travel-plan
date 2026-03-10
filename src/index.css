@@ -1649,18 +1649,79 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 
   .itinerary-panel--hidden { transform: translateX(-100%); }
 
-  .mobile-view-switcher {
+  /* 같이보기 분할 모드 */
+  .panels--split {
+    flex-direction: column;
+  }
+
+  .panels--split .itinerary-panel-wrapper,
+  .panels--split .map-panel-wrapper {
+    position: relative !important;
+    height: 50% !important;
+    transform: none !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transition: none !important;
+  }
+
+  /* 모바일 컨트롤 전체 래퍼 */
+  .mobile-controls {
     position: fixed;
     bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1000;
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* 같이보기 버튼 — pill 바로 위에 가로로 넓게 붙어서 등장 */
+  .split-view-hint {
+    width: 100%;
+    transform: translateY(8px);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 0.26s cubic-bezier(0.34, 1.4, 0.64, 1),
+      opacity   0.2s ease;
+  }
+
+  .split-view-hint--visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .split-view-btn {
+    width: 100%;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px 10px 0 0;
+    border-bottom: none;
+    padding: 4px 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+  }
+
+  .mobile-view-switcher {
+    display: flex;
+    align-items: center;
     background: var(--color-surface);
     border-radius: 30px;
     padding: 4px;
     box-shadow: var(--shadow-lg);
     border: 1px solid var(--color-border);
+    transition: border-radius 0.26s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+
+  /* 같이보기 버튼이 보일 때 pill 상단 모서리를 0으로 맞춤 */
+  .split-view-hint--visible + .mobile-view-switcher {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
   }
 
   .switcher-btn {
@@ -1672,12 +1733,61 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     display: flex;
     align-items: center;
     gap: 6px;
-    transition: all 0.2s;
+    transition: background 0.2s, color 0.2s, border-radius 0.2s;
+    white-space: nowrap;
   }
 
-  .switcher-btn--active {
+  /* ── state: list ── 일정(active) */
+  .mobile-view-switcher--list .switcher-btn--list {
     background: var(--color-primary);
     color: white;
+  }
+
+  /* ── state: map ── 지도(active) */
+  .mobile-view-switcher--map .switcher-btn--map {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  /* ── state: map-tracking ── [지도+현위치] 하나의 박스 */
+  .mobile-view-switcher--map-tracking .switcher-btn--map {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 26px 0 0 26px;
+  }
+  .mobile-view-switcher--map-tracking .switcher-location-btn {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 0 26px 26px 0;
+  }
+
+  /* ── state: both ── [일정+지도] 하나의 박스 */
+  .mobile-view-switcher--both .switcher-btn--list {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 26px 0 0 26px;
+  }
+  .mobile-view-switcher--both .switcher-btn--map {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 0 26px 26px 0;
+  }
+
+  /* ── state: both-tracking ── [일정+지도+현위치] 하나의 박스 */
+  .mobile-view-switcher--both-tracking .switcher-btn--list {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 26px 0 0 26px;
+  }
+  .mobile-view-switcher--both-tracking .switcher-btn--map {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 0;
+  }
+  .mobile-view-switcher--both-tracking .switcher-location-btn {
+    background: var(--color-primary);
+    color: white;
+    border-radius: 0 26px 26px 0;
   }
 
   .switcher-location-btn {
@@ -1687,9 +1797,12 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     opacity: 0;
     pointer-events: none;
     transition:
-      max-width 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
-      padding   0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
-      opacity   0.18s ease;
+      max-width    0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
+      padding      0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
+      opacity      0.18s ease,
+      background   0.2s ease,
+      color        0.2s ease,
+      border-radius 0.2s ease;
   }
 
   .switcher-location-btn--visible {
