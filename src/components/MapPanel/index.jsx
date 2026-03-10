@@ -59,17 +59,20 @@ function parseReverseGeocode(response) {
     if (r.name === 'roadaddr') {
       const { region: g = {}, land: l = {} } = r
       const parts = [g.area1?.name, g.area2?.name, l.name, l.number1 && (l.number2 ? `${l.number1}-${l.number2}` : l.number1)].filter(Boolean)
-      return parts.join(' ')
+      const address = parts.join(' ')
+      const buildingName = l.addition0?.type === 'building' && l.addition0?.value ? l.addition0.value : null
+      return { name: buildingName || address, address }
     }
   }
   for (const r of results) {
     if (r.name === 'addr') {
       const { region: g = {}, land: l = {} } = r
       const parts = [g.area1?.name, g.area2?.name, g.area3?.name, l.number1 && (l.number2 ? `${l.number1}-${l.number2}` : l.number1)].filter(Boolean)
-      return parts.join(' ')
+      const address = parts.join(' ')
+      return { name: address, address }
     }
   }
-  return ''
+  return { name: '', address: '' }
 }
 
 function buildStackedInfoWindowContent(group, onSelect, onClose) {
@@ -227,11 +230,11 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
               ].join(','),
             },
             (status, response) => {
-              let address = ''
+              let name = '', address = ''
               if (status === window.naver.maps.Service.Status.OK) {
-                address = parseReverseGeocode(response)
+                ;({ name, address } = parseReverseGeocode(response))
               }
-              setPreviewPlace({ lat, lng, destination: address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`, address })
+              setPreviewPlace({ lat, lng, destination: name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`, address })
             }
           )
         } else {

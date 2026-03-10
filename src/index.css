@@ -759,6 +759,29 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   background: white;
 }
 
+.place-search-clear-pin {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border: 1.5px solid var(--color-danger);
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.9;
+  transition: opacity 0.15s, background 0.15s;
+}
+.place-search-clear-pin:hover {
+  opacity: 1;
+  background: #fff0f0;
+}
+
 .place-results {
   position: absolute;
   top: calc(100% + 4px);

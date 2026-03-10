@@ -202,12 +202,10 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
               onChange={val => setForm(f => ({ ...f, address: val }))}
               placeholder="주소"
               onOpenChange={open => isSearchOpen.current = open}
-              onSelectResult={r => setForm(f => ({
-                ...f,
-                address: r.roadAddress || r.address || '',
-                lat: r.lat,
-                lng: r.lng,
-              }))}
+              onSelectResult={r => { const addr = r.roadAddress || r.address || ''; setForm(f => ({ ...f, destination: addr, address: addr, lat: r.lat, lng: r.lng })) }}
+              hasPin={!!(form.lat && form.lng)}
+              onClearPin={() => setForm(f => ({ ...f, lat: null, lng: null }))}
+              addressMode
             />
           </div>
 
