@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
 
               } else if (req.url === '/api/shorten') {
                 const { url } = body
-                const r = await fetch('https://apisis.dev/api/url/short', {
+                const r = await fetch('https://apisis.dev/api/url/short/apisis', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', 'X-API-Key': env.APISIS_API_KEY },
                   body: JSON.stringify({ url }),
@@ -64,7 +64,7 @@ export default defineConfig(({ mode }) => {
                 // 단축 URL 생성 후 QR 생성
                 let qrTargetUrl = url
                 try {
-                  const sr = await fetch('https://apisis.dev/api/url/short', {
+                  const sr = await fetch('https://apisis.dev/api/url/short/apisis', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-API-Key': env.APISIS_API_KEY },
                     body: JSON.stringify({ url }),

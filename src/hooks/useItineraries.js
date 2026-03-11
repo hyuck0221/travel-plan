@@ -297,7 +297,7 @@ export function useItineraries() {
     switchPlan,
     conflictData,
     resolveConflict,
-    isUrlLimitReached: urlLength > 3000,
+    isUrlLimitReached: urlLength > 65535,
     isLocked,
     toggleLock,
   }

@@ -53,7 +53,7 @@ export default function Header({
 
   const handleCopyLink = async () => {
     if (isUrlLimitReached) {
-      // 3000자 초과 시: 단축 없이 바로 복사
+      // 65535자 초과 시: 단축 없이 바로 복사
       try {
         await navigator.clipboard.writeText(window.location.href)
         alert('링크가 클립보드에 복사되었습니다. (용량 초과로 단축되지 않은 긴 링크입니다.)')
@@ -93,7 +93,7 @@ export default function Header({
   const handleShare = async () => {
     let shareUrl = window.location.href
     
-    // 3000자 이내일 때만 단축 시도
+    // 65535자 이내일 때만 단축 시도
     if (!isUrlLimitReached) {
       try { shareUrl = await shortenUrl(shareUrl) } catch {}
     }

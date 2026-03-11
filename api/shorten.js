@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch('https://apisis.dev/api/url/short', {
+    const response = await fetch('https://apisis.dev/api/url/short/apisis', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

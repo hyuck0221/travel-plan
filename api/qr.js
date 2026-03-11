@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     // 1. 단축 URL 생성 (실패해도 원본 URL로 fallback)
     let qrTargetUrl = url
     try {
-      const shortenRes = await fetch('https://apisis.dev/api/url/short', {
+      const shortenRes = await fetch('https://apisis.dev/api/url/short/apisis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
         body: JSON.stringify({ url }),
