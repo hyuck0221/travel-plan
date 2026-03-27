@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/mcp", "destination": "/api/mcp" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
