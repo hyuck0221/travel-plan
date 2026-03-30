@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import QRModal from './QRModal'
 import PlanSelector from './PlanSelector'
-import { IconPlane, IconUndo, IconRedo, IconLink, IconQR, IconShare, IconLoader, IconLock, IconUnlock } from './Icons'
+import { IconLogo, IconUndo, IconRedo, IconLink, IconQR, IconShare, IconLoader, IconLock, IconUnlock } from './Icons'
 
 // In-memory cache for the current session
 const shortenMemCache = new Map()
@@ -117,7 +117,7 @@ export default function Header({
         <div className="app-header">
           <div className="header-left">
             <div className="header-title">
-              <IconPlane className="header-icon" />
+              <IconLogo size={28} />
               <h1>여행 일정</h1>
             </div>
             <div className="header-history">

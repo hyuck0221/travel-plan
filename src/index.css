@@ -1191,6 +1191,53 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 /* ==========================================
+   Footer
+   ========================================== */
+.app-footer {
+  width: 100%;
+  padding: 16px;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.footer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.footer-link-btn {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  transition: color 0.15s;
+}
+
+.footer-link-btn:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.footer-divider {
+  font-size: 11px;
+  color: var(--color-border);
+}
+
+.footer-copyright {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+/* ==========================================
    Modal
    ========================================== */
 .modal-overlay {
@@ -1202,6 +1249,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   justify-content: center;
   z-index: 1000;
   animation: fadeInDown 0.15s ease;
+  backdrop-filter: blur(4px);
 }
 
 .modal-content {
@@ -1210,6 +1258,13 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   box-shadow: var(--shadow-lg);
   width: min(360px, 90vw);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content--legal {
+  width: min(640px, 95vw);
+  max-height: 80vh;
 }
 
 .modal-header {
@@ -1234,10 +1289,30 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 
 .modal-body {
   padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+  overflow-y: auto;
+}
+
+.legal-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.legal-section {
+  margin-bottom: 20px;
+}
+
+.legal-section h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--color-border);
+  text-align: right;
 }
 
 .qr-image {

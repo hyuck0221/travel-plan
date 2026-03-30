@@ -13,6 +13,15 @@ const Icon = ({ size = 16, children, ...props }) => (
   </svg>
 )
 
+export const IconLogo = ({ size = 32, ...props }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <rect width="48" height="48" rx="14" fill="#4F9CF9"/>
+    <path d="M10 32 Q 24 42, 38 32" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeDasharray="1, 5" opacity="0.5" />
+    <path d="M24 8 C 17.5 8, 13 12.5, 13 19 C 13 26, 24 36, 24 36 C 24 36, 35 26, 35 19 C 35 12.5, 30.5 8, 24 8 Z" fill="white" />
+    <circle cx="24" cy="18.5" r="3.5" fill="#4F9CF9" />
+  </svg>
+)
+
 export const IconPlane = (p) => (
   <Icon size={20} {...p}>
     <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21 4 19 4s-2 1-3.5 2.5L9 8.2l-8-1.8 4 4L3 15l3-1 1 3 4-4z" fill="currentColor" stroke="none"/>

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, Fragment } from 'react'
 import { IconPlus, IconMap, IconEdit } from '../Icons'
 import DateSection from './DateSection'
 import ItineraryItem from './ItineraryItem'
+import Footer from '../Footer'
 
 function formatDate(d) {
   return d.replace(/-/g, '.')
@@ -259,6 +260,7 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
           ))}
         </div>
       )}
+      <Footer />
     </aside>
   )
 }

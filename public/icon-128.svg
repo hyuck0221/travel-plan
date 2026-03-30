@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg-grad-128" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Modern Rounded Background -->
+  <rect width="128" height="128" rx="32" fill="url(#bg-grad-128)"/>
+  
+  <!-- Simple Path -->
+  <path d="M25 90 Q 64 115, 103 90" fill="none" stroke="white" stroke-width="8" stroke-linecap="round" stroke-dasharray="2, 12" opacity="0.5" />
+  
+  <!-- Minimalist Pin -->
+  <path d="M64 20 C 46 20, 32 34, 32 52 C 32 70, 64 98, 64 98 C 64 98, 96 70, 96 52 C 96 34, 82 20, 64 20 Z" fill="white" />
+  
+  <!-- Inner Dot -->
+  <circle cx="64" cy="50" r="10" fill="#2563EB" />
+</svg>
