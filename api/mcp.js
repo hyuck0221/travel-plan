@@ -80,8 +80,34 @@ async function encodeState(state) {
   }
 }
 
+async function shortenUrl(url) {
+  const apiKey = process.env.APISIS_API_KEY;
+  if (!apiKey) return url;
+
+  try {
+    const response = await fetch("https://apisis.dev/api/url/short/apisis", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) return url;
+
+    const data = await response.json();
+    return data?.payload?.url || url;
+  } catch (err) {
+    console.error("[MCP] Shorten error:", err);
+    return url;
+  }
+}
+
 // Stateless HTTP Handler (JSON-RPC 2.0)
 export default async function handler(req, res) {
+  const baseUrl = process.env.BASE_URL || "https://travel.hspace.site";
+  
   // GET 요청 시 상태 정보 반환
   if (req.method === "GET") {
     return res.status(200).send("Travel Plan MCP Server (Stateless HTTP) is running. Use POST for JSON-RPC 2.0 requests.");
@@ -103,7 +129,11 @@ export default async function handler(req, res) {
         result: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "travel-plan-mcp", version: "1.0.0" }
+          serverInfo: { 
+            name: "travel-plan-mcp", 
+            version: "1.0.0",
+            icon: `${baseUrl}/icon-128.svg`
+          }
         }
       });
     }
@@ -126,7 +156,7 @@ export default async function handler(req, res) {
             },
             {
               name: "create_travel_plan",
-              description: "Generate a link for the travel-plan app.",
+              description: "Generate a shortened link for the travel-plan app that contains all the items and title.",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -197,8 +227,9 @@ export default async function handler(req, res) {
           }))
         };
         const encoded = await encodeState(state);
-        const baseUrl = process.env.BASE_URL || "https://travel.hspace.site";
-        toolResult = { content: [{ type: "text", text: `Link: ${baseUrl}/#${encoded}` }] };
+        const fullUrl = `${baseUrl}/#${encoded}`;
+        const shortUrl = await shortenUrl(fullUrl);
+        toolResult = { content: [{ type: "text", text: `Link: ${shortUrl}` }] };
       } 
       else {
         throw new Error(`Tool not found: ${name}`);

@@ -121,6 +121,30 @@ const server = new Server(
   }
 );
 
+async function shortenUrl(url) {
+  const apiKey = process.env.APISIS_API_KEY;
+  if (!apiKey) return url;
+
+  try {
+    const response = await fetch("https://apisis.dev/api/url/short/apisis", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) return url;
+
+    const data = await response.json();
+    return data?.payload?.url || url;
+  } catch (err) {
+    console.error("Shorten error:", err);
+    return url;
+  }
+}
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -244,12 +268,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     const encoded = await encodeState(state);
     const fullUrl = `${BASE_URL}/#${encoded}`;
+    const shortUrl = await shortenUrl(fullUrl);
 
     return {
       content: [
         { 
           type: "text", 
-          text: `Travel plan created successfully!\n\nTitle: ${title}\nItems: ${items.length}\nURL: ${fullUrl}` 
+          text: `Travel plan created successfully!\n\nTitle: ${title}\nItems: ${items.length}\nURL: ${shortUrl}` 
         }
       ],
     };
