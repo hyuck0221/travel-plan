@@ -13,7 +13,14 @@ const MAX_PANEL_RATIO = 0.75
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(() => {
-    return !localStorage.getItem('hasVisited')
+    if (localStorage.getItem('hasVisited')) return false
+    // URL 해시에 인코딩된 일정 데이터가 있으면 랜딩 스킵
+    const originalUrl = window.__ORIGINAL_URL || window.location.href
+    try {
+      const hash = new URL(originalUrl).hash
+      if (hash && hash.length > 1) return false
+    } catch (_) {}
+    return true
   })
 
   const handleEnter = () => {
