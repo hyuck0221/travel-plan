@@ -189,77 +189,79 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
         )}
       </div>
 
-      {items.length === 0 ? (
-        <div className="panel-empty">
-          <IconMap className="empty-icon" />
-          <p>아직 일정이 없습니다.</p>
-          {!isLocked && (
-            <>
-              <p className="empty-sub">지도에서 장소를 검색하거나 아래 버튼으로 일정을 추가하세요.</p>
-              <button className="btn btn-primary" onClick={() => onAddItem('')}>
-                <IconPlus size={14} /> 첫 일정 추가하기
-              </button>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="date-groups">
-          {isDragging && (
-            <DropZone
-              isActive={dragOverZone === 0}
-              onDragOver={() => setDragOverZone(0)}
-              onDragLeave={() => setDragOverZone(null)}
-              onDrop={() => handleDrop(0)}
-            />
-          )}
-          {sections.map((section, idx) => (
-            <Fragment key={section.key}>
-              {section.type === 'date' ? (
-                <DateSection
-                  date={section.date}
-                  items={section.items}
-                  activeItemId={activeItemId}
-                  currentItemId={currentItemId}
-                  onUpdate={onUpdate}
-                  onDelete={onDelete}
-                  onItemClick={onItemClick}
-                  onAddItem={onAddItem}
-                  isLocked={isLocked}
-                />
-              ) : (
-                <div
-                  className={`undated-item-container${draggedItemId === section.item.id ? ' undated-item-container--dragging' : ''}`}
-                  draggable={!isLocked && editingItemId !== section.item.id}
-                  onDragStart={(e) => handleDragStart(section.item.id, e)}
-                  onDragEnd={handleDragEnd}
-                >
-                  <ItineraryItem
-                    item={section.item}
-                    isActive={activeItemId === section.item.id}
-                    isCurrent={currentItemId === section.item.id}
-                    isDraggable={!isLocked}
+      <div className="itinerary-content">
+        {items.length === 0 ? (
+          <div className="panel-empty">
+            <IconMap className="empty-icon" />
+            <p>아직 일정이 없습니다.</p>
+            {!isLocked && (
+              <>
+                <p className="empty-sub">지도에서 장소를 검색하거나 아래 버튼으로 일정을 추가하세요.</p>
+                <button className="btn btn-primary" onClick={() => onAddItem('')}>
+                  <IconPlus size={14} /> 첫 일정 추가하기
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="date-groups">
+            {isDragging && (
+              <DropZone
+                isActive={dragOverZone === 0}
+                onDragOver={() => setDragOverZone(0)}
+                onDragLeave={() => setDragOverZone(null)}
+                onDrop={() => handleDrop(0)}
+              />
+            )}
+            {sections.map((section, idx) => (
+              <Fragment key={section.key}>
+                {section.type === 'date' ? (
+                  <DateSection
+                    date={section.date}
+                    items={section.items}
+                    activeItemId={activeItemId}
+                    currentItemId={currentItemId}
                     onUpdate={onUpdate}
                     onDelete={onDelete}
-                    onClick={onItemClick}
+                    onItemClick={onItemClick}
+                    onAddItem={onAddItem}
                     isLocked={isLocked}
-                    onEditingChange={(isEditing) =>
-                      setEditingItemId(isEditing ? section.item.id : null)
-                    }
                   />
-                </div>
-              )}
-              {isDragging && (
-                <DropZone
-                  isActive={dragOverZone === idx + 1}
-                  onDragOver={() => setDragOverZone(idx + 1)}
-                  onDragLeave={() => setDragOverZone(null)}
-                  onDrop={() => handleDrop(idx + 1)}
-                />
-              )}
-            </Fragment>
-          ))}
-        </div>
-      )}
+                ) : (
+                  <div
+                    className={`undated-item-container${draggedItemId === section.item.id ? ' undated-item-container--dragging' : ''}`}
+                    draggable={!isLocked && editingItemId !== section.item.id}
+                    onDragStart={(e) => handleDragStart(section.item.id, e)}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <ItineraryItem
+                      item={section.item}
+                      isActive={activeItemId === section.item.id}
+                      isCurrent={currentItemId === section.item.id}
+                      isDraggable={!isLocked}
+                      onUpdate={onUpdate}
+                      onDelete={onDelete}
+                      onClick={onItemClick}
+                      isLocked={isLocked}
+                      onEditingChange={(isEditing) =>
+                        setEditingItemId(isEditing ? section.item.id : null)
+                      }
+                    />
+                  </div>
+                )}
+                {isDragging && (
+                  <DropZone
+                    isActive={dragOverZone === idx + 1}
+                    onDragOver={() => setDragOverZone(idx + 1)}
+                    onDragLeave={() => setDragOverZone(null)}
+                    onDrop={() => handleDrop(idx + 1)}
+                  />
+                )}
+              </Fragment>
+            ))}
+          </div>
+        )}
+      </div>
       <Footer />
     </aside>
   )

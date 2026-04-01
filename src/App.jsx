@@ -3,6 +3,7 @@ import Header from './components/Header'
 import ItineraryPanel from './components/ItineraryPanel'
 import MapPanel from './components/MapPanel'
 import ConflictDialog from './components/ConflictDialog'
+import LandingPage from './components/LandingPage'
 import { IconMap, IconCalendar, IconLocation } from './components/Icons'
 import { useItineraries } from './hooks/useItineraries'
 import { computeNumberedItems } from './utils/markerNumbers'
@@ -11,6 +12,15 @@ const MIN_PANEL_WIDTH = 240
 const MAX_PANEL_RATIO = 0.75
 
 export default function App() {
+  const [showLanding, setShowLanding] = useState(() => {
+    return !localStorage.getItem('hasVisited')
+  })
+
+  const handleEnter = () => {
+    localStorage.setItem('hasVisited', '1')
+    setShowLanding(false)
+  }
+
   const {
     title, items, addItem, updateItem, deleteItem, setTitle,
     canUndo, canRedo, undo, redo,
@@ -118,6 +128,8 @@ export default function App() {
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
   }, [isMobile])
+
+  if (showLanding) return <LandingPage onEnter={handleEnter} />
 
   return (
     <div className="app-layout">
