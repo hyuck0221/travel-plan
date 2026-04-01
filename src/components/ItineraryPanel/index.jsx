@@ -190,6 +190,7 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
       </div>
 
       <div className="itinerary-content">
+        <div className="itinerary-content-inner">
         {items.length === 0 ? (
           <div className="panel-empty">
             <IconMap className="empty-icon" />
@@ -261,8 +262,9 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
             ))}
           </div>
         )}
+        </div>
+        <Footer />
       </div>
-      <Footer />
     </aside>
   )
 }

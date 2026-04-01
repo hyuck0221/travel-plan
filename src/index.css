@@ -249,6 +249,17 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.itinerary-content-inner {
+  flex: 1;
+}
+
+.itinerary-content > .app-footer {
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .panel-resizer {
