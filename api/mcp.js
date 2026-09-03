@@ -106,7 +106,7 @@ async function shortenUrl(url) {
 
 // Stateless HTTP Handler (JSON-RPC 2.0)
 export default async function handler(req, res) {
-  const baseUrl = process.env.BASE_URL || "https://travelink.hspace.site";
+  const baseUrl = process.env.BASE_URL || "https://travelink.hshim.dev";
   
   // GET 요청 시 상태 정보 반환
   if (req.method === "GET") {

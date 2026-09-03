@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env.local") });
 
-const BASE_URL = process.env.BASE_URL || "https://travelink.hspace.site";
+const BASE_URL = process.env.BASE_URL || "https://travelink.hshim.dev";
 
 // Helper: UUID string to 16-byte Uint8Array
 function uuidToBytes(uuid) {

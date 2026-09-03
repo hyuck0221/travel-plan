@@ -1,7 +1,7 @@
 import { encodeState } from './urlEncoder.js'
 
 export const LEGACY_HOST = 'travel.hspace.site'
-export const MIGRATION_HOST = 'travelink.hspace.site'
+export const MIGRATION_HOST = 'travelink.hshim.dev'
 
 // The migration notice is required through the end of September 23, 2026 (KST).
 export const MIGRATION_DEADLINE = '2026-09-23T23:59:59.999+09:00'

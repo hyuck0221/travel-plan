@@ -5,7 +5,7 @@
 <h1 align="center">Travelink</h1>
 
 <p align="center">
-  <strong><a href="https://travelink.hspace.site">https://travelink.hspace.site</a></strong>
+  <strong><a href="https://travelink.hshim.dev">https://travelink.hshim.dev</a></strong>
 </p>
 
 <p align="center">

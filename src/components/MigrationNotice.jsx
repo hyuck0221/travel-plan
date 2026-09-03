@@ -3,6 +3,7 @@ import { IconCheck, IconClose, IconLoader } from './Icons'
 import {
   MIGRATION_DEADLINE_LABEL,
   MIGRATION_HOST,
+  LEGACY_HOST,
   buildMigratedPlanUrl,
   hasPlanData,
 } from '../utils/migration'
@@ -10,6 +11,60 @@ import './MigrationNotice.css'
 
 function planLabel(plan) {
   return plan.title?.trim() || '제목 없는 일정'
+}
+
+function MigrationIntroModal({ isOpen, onMigrate, onLater }) {
+  useEffect(() => {
+    if (!isOpen) return
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onLater()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isOpen, onLater])
+
+  if (!isOpen) return null
+
+  return (
+    <div
+      className="migration-overlay"
+      onMouseDown={event => { if (event.target === event.currentTarget) onLater() }}
+    >
+      <div className="migration-dialog migration-intro-dialog" role="dialog" aria-modal="true" aria-labelledby="migration-intro-title">
+        <div className="migration-dialog-header">
+          <div>
+            <div className="migration-dialog-eyebrow">중요 안내</div>
+            <h2 id="migration-intro-title">서비스 주소가 변경됩니다</h2>
+          </div>
+          <button className="modal-close" onClick={onLater} aria-label="다음에 하기">
+            <IconClose />
+          </button>
+        </div>
+
+        <div className="migration-dialog-body">
+          <p className="migration-dialog-description">
+            Travelink 서비스가 새로운 주소로 이전합니다. 저장된 일정을 새 주소에서도 계속 사용하려면
+            {` ${MIGRATION_DEADLINE_LABEL}`}까지 이관해 주세요.
+          </p>
+
+          <div className="migration-domain-transfer" aria-label={`${LEGACY_HOST}에서 ${MIGRATION_HOST}로 주소 변경`}>
+            <span className="migration-domain migration-domain--legacy">{LEGACY_HOST}</span>
+            <span className="migration-domain-arrow" aria-hidden="true">→</span>
+            <span className="migration-domain migration-domain--new">{MIGRATION_HOST}</span>
+          </div>
+
+          <p className="migration-dialog-note">
+            이관할 일정만 선택할 수 있으며, 기존 일정은 삭제되지 않습니다.
+          </p>
+        </div>
+
+        <div className="migration-dialog-footer">
+          <button className="btn btn-secondary" onClick={onLater}>다음에 하기</button>
+          <button className="btn btn-primary" onClick={onMigrate}>일정 이관하기</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function MigrationModal({ isOpen, plans, onClose }) {
@@ -155,7 +210,7 @@ function MigrationModal({ isOpen, plans, onClose }) {
         </div>
 
         <div className="migration-dialog-footer">
-          <button className="btn btn-secondary" onClick={onClose}>나중에</button>
+          <button className="btn btn-secondary" onClick={onClose}>다음에 하기</button>
           <button className="btn btn-primary" onClick={handleConfirm} disabled={!canConfirm}>
             선택한 일정 새 창에서 열기
           </button>
@@ -166,34 +221,23 @@ function MigrationModal({ isOpen, plans, onClose }) {
 }
 
 export default function MigrationNotice({ plans }) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [introOpen, setIntroOpen] = useState(true)
+  const [selectionOpen, setSelectionOpen] = useState(false)
   const migratablePlans = useMemo(() => plans.filter(hasPlanData), [plans])
 
   if (migratablePlans.length === 0) return null
 
+  const handleMigrate = () => {
+    setIntroOpen(false)
+    setSelectionOpen(true)
+  }
+
+  const handleLater = () => setIntroOpen(false)
+
   return (
     <>
-      <aside className="migration-notice" role="alert">
-        <div className="migration-notice-icon" aria-hidden="true">↗</div>
-        <div className="migration-notice-copy">
-          <strong>서비스 주소가 변경됩니다</strong>
-          <span>
-            {MIGRATION_DEADLINE_LABEL}까지 <b>travelink.hspace.site</b>로 일정을 이관해 주세요.
-          </span>
-        </div>
-        <a
-          className="migration-notice-link"
-          href={`https://${MIGRATION_HOST}`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          새 주소 보기
-        </a>
-        <button className="migration-notice-button" onClick={() => setIsOpen(true)}>
-          일정 이관
-        </button>
-      </aside>
-      <MigrationModal isOpen={isOpen} plans={plans} onClose={() => setIsOpen(false)} />
+      <MigrationIntroModal isOpen={introOpen} onMigrate={handleMigrate} onLater={handleLater} />
+      <MigrationModal isOpen={selectionOpen} plans={plans} onClose={() => setSelectionOpen(false)} />
     </>
   )
 }

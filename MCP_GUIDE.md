@@ -8,7 +8,7 @@ Model Context Protocol(MCP)을 사용하면 AI 에이전트(Claude 등)가 직�
 
 본 서비스는 **Stateless HTTP Transport** 방식을 통해 MCP 기능을 제공합니다.
 
-- **MCP 엔드포인트**: `https://travelink.hspace.site/mcp`
+- **MCP 엔드포인트**: `https://travelink.hshim.dev/mcp`
 - **통신 방식**: HTTP POST (JSON-RPC 2.0)
 
 ---
@@ -25,7 +25,7 @@ Model Context Protocol(MCP)을 사용하면 AI 에이전트(Claude 등)가 직�
 - **입력**: 
   - `title`: 여행 제목
   - `items`: 일정 리스트 (장소명, 주소, 좌표, 날짜, 시간, 메모 등)
-- **결과**: `https://travelink.hspace.site/#<encoded_data>` 형태의 완성된 링크
+- **결과**: `https://travelink.hshim.dev/#<encoded_data>` 형태의 완성된 링크
 
 ---
 
