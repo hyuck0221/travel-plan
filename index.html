@@ -20,8 +20,10 @@
       })();
     </script>
     
-    <!-- 네이버 지도 로드 (이 시점에 브라우저는 짧은 Referer를 전송함) -->
-    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=b7v8ylky86&submodules=geocoder"></script>
+    <!-- 네이버 지도 로드 (GL 벡터 지도, 이 시점에 짧은 Referer를 전송함) -->
+    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=b7v8ylky86&submodules=gl"></script>
+    <!-- GL과 충돌하지 않도록 역지오코딩은 지도 API 뒤에 순차 로드한다. -->
+    <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps-geocoder.js"></script>
     
     <script type="text/javascript">
       // 2. 지도 로드 직후 즉시 원래 긴 URL로 복구 (React가 실행되기 전)

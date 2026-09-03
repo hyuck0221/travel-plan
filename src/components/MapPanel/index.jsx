@@ -137,22 +137,39 @@ function buildInfoWindowContent(destination, address, onRegister, onClose) {
     </div>`
 }
 
+function getMarkerGroupSignature(group) {
+  return group.map(item => [
+    item.id,
+    item.markerNumber,
+    item.destination,
+    item.address,
+    item.date,
+    item.time,
+  ].join(':')).join('|')
+}
+
 export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace, tracking, onToggleTracking, isLocked }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
-  const markersRef = useRef([])
-  const polylinesRef = useRef([])
+  const markerEntriesRef = useRef(new Map())
+  const markerGroupsRef = useRef(new Map())
+  const polylineRef = useRef(null)
   const initializedRef = useRef(false)
   const itemsRef = useRef(items)
   const previewMarkerRef = useRef(null)
   const previewInfoWindowRef = useRef(null)
   const stackedInfoWindowRef = useRef(null)
+  const stackedInfoWindowKeyRef = useRef(null)
+  const stackedInfoWindowGroupSignatureRef = useRef(null)
   const locationMarkerRef = useRef(null)
   const watchIdRef = useRef(null)
+  const resizeFrameRef = useRef(null)
   const onRegisterRef = useRef(onRegisterPlace)
+  const onMarkerClickRef = useRef(onMarkerClick)
   const isLockedRef = useRef(isLocked)
 
   useEffect(() => { onRegisterRef.current = onRegisterPlace }, [onRegisterPlace])
+  useEffect(() => { onMarkerClickRef.current = onMarkerClick }, [onMarkerClick])
   useEffect(() => { itemsRef.current = items }, [items])
   useEffect(() => {
     isLockedRef.current = isLocked
@@ -160,31 +177,100 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   }, [isLocked])
 
   const [previewPlace, setPreviewPlace] = useState(null)
+  const [mapReady, setMapReady] = useState(false)
+
+  const closeStackedInfoWindow = () => {
+    if (stackedInfoWindowRef.current) stackedInfoWindowRef.current.close()
+    stackedInfoWindowRef.current = null
+    stackedInfoWindowKeyRef.current = null
+    stackedInfoWindowGroupSignatureRef.current = null
+    delete window.__stackedSelectItem
+    delete window.__stackedClosePopup
+  }
+
+  const handleMarkerGroupClick = (groupKey) => {
+    const map = mapInstanceRef.current
+    const group = markerGroupsRef.current.get(groupKey)
+    const entry = markerEntriesRef.current.get(groupKey)
+    if (!map || !group || !entry) return
+
+    if (group.length === 1) {
+      closeStackedInfoWindow()
+      onMarkerClickRef.current?.(group[0].id)
+      return
+    }
+
+    closeStackedInfoWindow()
+    const content = buildStackedInfoWindowContent(
+      group,
+      (id) => {
+        closeStackedInfoWindow()
+        onMarkerClickRef.current?.(id)
+      },
+      closeStackedInfoWindow
+    )
+    const infoWindow = new window.naver.maps.InfoWindow({
+      content,
+      borderWidth: 0,
+      backgroundColor: 'transparent',
+      disableAnchor: false,
+      anchorSize: new window.naver.maps.Size(12, 12),
+      anchorColor: 'white',
+      pixelOffset: new window.naver.maps.Point(0, -8),
+    })
+    infoWindow.open(map, entry.marker)
+    stackedInfoWindowRef.current = infoWindow
+    stackedInfoWindowKeyRef.current = groupKey
+    stackedInfoWindowGroupSignatureRef.current = getMarkerGroupSignature(group)
+  }
 
   // 지도 컨테이너 크기 변경 감지 → 지도 리사이즈 트리거 (같이보기 전환 대응)
   useEffect(() => {
     if (!mapRef.current) return
     const observer = new ResizeObserver(() => {
-      if (mapInstanceRef.current) {
-        window.naver.maps.Event.trigger(mapInstanceRef.current, 'resize')
-      }
+      // 패널 드래그/모바일 전환 중에는 ResizeObserver가 여러 번 호출되므로
+      // 한 프레임에 한 번만 네이버 지도 리사이즈를 수행한다.
+      if (resizeFrameRef.current !== null) return
+      resizeFrameRef.current = requestAnimationFrame(() => {
+        resizeFrameRef.current = null
+        if (mapInstanceRef.current) {
+          window.naver.maps.Event.trigger(mapInstanceRef.current, 'resize')
+        }
+      })
     })
     observer.observe(mapRef.current)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (resizeFrameRef.current !== null) {
+        cancelAnimationFrame(resizeFrameRef.current)
+        resizeFrameRef.current = null
+      }
+    }
   }, [])
 
   // Initialize map
   useEffect(() => {
     const tryInit = () => {
-      if (!window.naver?.maps || initializedRef.current) return
+      if (!window.naver?.maps || initializedRef.current) return false
+      // 최신 GL 로더는 glEnabled를 먼저 true로 만들고 jsContentLoaded는
+      // false로 유지하는 경우가 있다. GL 로드 완료 신호를 우선 사용하되,
+      // GL 없이 코어 API만 준비된 환경에서는 jsContentLoaded를 사용한다.
+      const glReady = window.naver.maps.glEnabled === true
+      if (!glReady && window.naver.maps.jsContentLoaded !== true) return false
       initializedRef.current = true
 
       const map = new window.naver.maps.Map(mapRef.current, {
         center: new window.naver.maps.LatLng(37.5665, 126.978),
         zoom: 12,
         mapTypeId: window.naver.maps.MapTypeId.NORMAL,
+        // GL 서브모듈이 로드된 환경에서는 네이버의 WebGL 벡터맵을 사용한다.
+        // 모듈을 사용할 수 없는 브라우저에서는 네이버 API가 래스터 지도로 폴백한다.
+        gl: glReady,
+        tileTransition: true,
+        tileDuration: 320,
       })
       mapInstanceRef.current = map
+      setMapReady(true)
 
       // 초기 위치: 일정 좌표 → 현재 위치 → 서울 기본
       const coordItems = itemsRef.current.filter(i => i.lat != null && i.lng != null)
@@ -211,10 +297,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
 
       // Map click → close stacked popup + preview pin with reverse geocode
       window.naver.maps.Event.addListener(map, 'click', (e) => {
-        if (stackedInfoWindowRef.current) {
-          stackedInfoWindowRef.current.close()
-          stackedInfoWindowRef.current = null
-        }
+        closeStackedInfoWindow()
         if (isLockedRef.current) return
 
         const lat = e.coord.lat()
@@ -241,16 +324,14 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
           setPreviewPlace({ lat, lng, destination: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, address: '' })
         }
       })
+      return true
     }
 
-    if (window.naver?.maps) {
-      tryInit()
-    } else {
-      const interval = setInterval(() => {
-        if (window.naver?.maps) { clearInterval(interval); tryInit() }
-      }, 100)
-      return () => clearInterval(interval)
-    }
+    if (tryInit()) return undefined
+    const interval = setInterval(() => {
+      if (tryInit()) clearInterval(interval)
+    }, 100)
+    return () => clearInterval(interval)
   }, [])
 
   // Preview pin + InfoWindow
@@ -290,97 +371,130 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     previewInfoWindowRef.current = infoWindow
 
     return () => { delete window.__registerPreviewPlace; delete window.__closePreviewPlace }
-  }, [previewPlace])
+  }, [previewPlace, mapReady])
 
-  // Markers + polylines
+  // 일정 마커: 기존 오버레이를 재사용하고 바뀐 마커만 갱신한다.
+  // activeItemId가 바뀔 때마다 모든 마커를 제거/재생성하던 비용을 없애
+  // 지도 확대·축소와 일정 선택이 동시에 일어날 때의 끊김을 줄인다.
   useEffect(() => {
-    if (!mapInstanceRef.current) return
-    markersRef.current.forEach(m => m.setMap(null)); markersRef.current = []
-    polylinesRef.current.forEach(p => p.setMap(null)); polylinesRef.current = []
-    if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
-    delete window.__stackedSelectItem
-    delete window.__stackedClosePopup
+    const map = mapInstanceRef.current
+    if (!mapReady || !map) return
 
     // Group items by coordinate to detect overlapping pins
-    const groups = {}
+    const groups = new Map()
     items.forEach(item => {
       if (item.lat == null || item.lng == null || item.markerNumber == null) return
       const key = `${Number(item.lat).toFixed(6)},${Number(item.lng).toFixed(6)}`
-      if (!groups[key]) groups[key] = []
-      groups[key].push(item)
+      const group = groups.get(key) || []
+      group.push(item)
+      groups.set(key, group)
     })
+    markerGroupsRef.current = groups
 
-    Object.values(groups).forEach(group => {
+    for (const [groupKey, entry] of markerEntriesRef.current) {
+      if (groups.has(groupKey)) continue
+      entry.marker.setMap(null)
+      markerEntriesRef.current.delete(groupKey)
+      if (stackedInfoWindowKeyRef.current === groupKey) closeStackedInfoWindow()
+    }
+
+    const openGroupKey = stackedInfoWindowKeyRef.current
+    if (openGroupKey) {
+      const openGroup = groups.get(openGroupKey)
+      if (!openGroup || openGroup.length < 2 || getMarkerGroupSignature(openGroup) !== stackedInfoWindowGroupSignatureRef.current) {
+        closeStackedInfoWindow()
+      }
+    }
+
+    for (const [groupKey, group] of groups) {
       const pos = new window.naver.maps.LatLng(group[0].lat, group[0].lng)
       const isActive = group.some(item => item.id === activeItemId)
+      const numbers = group.map(i => i.markerNumber)
+      const title = group.length === 1 ? group[0].destination || '' : ''
+      const zIndex = group.length === 1
+        ? (group[0].id === activeItemId ? 100 : 10)
+        : (isActive ? 100 : 15)
+      const renderKey = [group.length, numbers.join(','), isActive ? 'active' : 'idle', title].join('|')
+      const positionKey = `${Number(group[0].lat)},${Number(group[0].lng)}`
+      let entry = markerEntriesRef.current.get(groupKey)
 
-      if (group.length === 1) {
-        const item = group[0]
+      if (!entry) {
         const marker = new window.naver.maps.Marker({
           position: pos,
-          map: mapInstanceRef.current,
-          icon: createMarkerIcon(item.markerNumber, item.id === activeItemId),
-          title: item.destination || '',
-          zIndex: item.id === activeItemId ? 100 : 10,
+          map,
+          icon: group.length === 1
+            ? createMarkerIcon(group[0].markerNumber, group[0].id === activeItemId)
+            : createStackedMarkerIcon(numbers, isActive),
+          title,
+          zIndex,
         })
-        window.naver.maps.Event.addListener(marker, 'click', () => onMarkerClick(item.id))
-        markersRef.current.push(marker)
+        window.naver.maps.Event.addListener(marker, 'click', () => handleMarkerGroupClick(groupKey))
+        entry = { marker, renderKey, positionKey }
+        markerEntriesRef.current.set(groupKey, entry)
       } else {
-        // Overlapping pins: show stacked marker with popup on click
-        const numbers = group.map(i => i.markerNumber)
-        const marker = new window.naver.maps.Marker({
-          position: pos,
-          map: mapInstanceRef.current,
-          icon: createStackedMarkerIcon(numbers, isActive),
-          zIndex: isActive ? 100 : 15,
-        })
-        window.naver.maps.Event.addListener(marker, 'click', () => {
-          if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
-          const content = buildStackedInfoWindowContent(
-            group,
-            (id) => {
-              if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
-              onMarkerClick(id)
-            },
-            () => {
-              if (stackedInfoWindowRef.current) { stackedInfoWindowRef.current.close(); stackedInfoWindowRef.current = null }
-            }
-          )
-          const iw = new window.naver.maps.InfoWindow({
-            content,
-            borderWidth: 0,
-            backgroundColor: 'transparent',
-            disableAnchor: false,
-            anchorSize: new window.naver.maps.Size(12, 12),
-            anchorColor: 'white',
-            pixelOffset: new window.naver.maps.Point(0, -8),
-          })
-          iw.open(mapInstanceRef.current, marker)
-          stackedInfoWindowRef.current = iw
-        })
-        markersRef.current.push(marker)
+        if (entry.positionKey !== positionKey) {
+          entry.marker.setPosition(pos)
+          entry.positionKey = positionKey
+        }
+        if (entry.renderKey !== renderKey) {
+          entry.marker.setIcon(group.length === 1
+            ? createMarkerIcon(group[0].markerNumber, group[0].id === activeItemId)
+            : createStackedMarkerIcon(numbers, isActive))
+          entry.marker.setOptions({ title, zIndex })
+          entry.renderKey = renderKey
+        }
       }
-    })
+    }
+  }, [items, activeItemId, mapReady])
 
+  // 경로선도 하나만 유지하고 경로 데이터만 갱신한다.
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!mapReady || !map) return
     const sorted = getSortedMarkerItems(items)
-    if (sorted.length >= 2) {
-      const polyline = new window.naver.maps.Polyline({
-        path: sorted.map(i => new window.naver.maps.LatLng(i.lat, i.lng)),
-        map: mapInstanceRef.current,
+    if (sorted.length < 2) {
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null)
+        polylineRef.current = null
+      }
+      return
+    }
+
+    const path = sorted.map(i => new window.naver.maps.LatLng(i.lat, i.lng))
+    if (polylineRef.current) {
+      polylineRef.current.setPath(path)
+    } else {
+      polylineRef.current = new window.naver.maps.Polyline({
+        path,
+        map,
         strokeColor: '#4F9CF9', strokeWeight: 2, strokeOpacity: 0.7,
       })
-      polylinesRef.current.push(polyline)
     }
-  }, [items, activeItemId, onMarkerClick])
+  }, [items, mapReady])
+
+  // 지도 종료 시 네이버 오버레이와 전역 콜백 정리
+  useEffect(() => () => {
+    markerEntriesRef.current.forEach(({ marker }) => marker.setMap(null))
+    markerEntriesRef.current.clear()
+    markerGroupsRef.current.clear()
+    if (polylineRef.current) polylineRef.current.setMap(null)
+    polylineRef.current = null
+    closeStackedInfoWindow()
+    delete window.__registerPreviewPlace
+    delete window.__closePreviewPlace
+  }, [])
 
   // Pan to active item
   useEffect(() => {
-    if (!mapInstanceRef.current || !activeItemId) return
+    if (!mapReady || !mapInstanceRef.current || !activeItemId) return
     const item = items.find(i => i.id === activeItemId)
     if (item?.lat != null && item?.lng != null) {
-      mapInstanceRef.current.panTo(new window.naver.maps.LatLng(item.lat, item.lng))
+      mapInstanceRef.current.panTo(
+        new window.naver.maps.LatLng(item.lat, item.lng),
+        { duration: 420, easing: 'easeOutCubic' }
+      )
     }
-  }, [activeItemId, items])
+  }, [activeItemId, items, mapReady])
 
   // Location tracking
   useEffect(() => {
@@ -420,12 +534,17 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     return () => {
       if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current)
     }
-  }, [tracking])
+  }, [tracking, mapReady])
 
   const handleSelectPlace = ({ lat, lng, destination, address }) => {
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.panTo(new window.naver.maps.LatLng(lat, lng))
-      mapInstanceRef.current.setZoom(15)
+      const coord = new window.naver.maps.LatLng(lat, lng)
+      if (typeof mapInstanceRef.current.morph === 'function') {
+        mapInstanceRef.current.morph(coord, 15, { duration: 480, easing: 'easeOutCubic' })
+      } else {
+        mapInstanceRef.current.setZoom(15)
+        mapInstanceRef.current.panTo(coord, { duration: 480, easing: 'easeOutCubic' })
+      }
     }
     if (!isLocked) {
       setPreviewPlace({ lat, lng, destination, address })
