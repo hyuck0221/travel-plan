@@ -99,7 +99,7 @@ export default function Header({
     }
 
     if (navigator.share) {
-      try { await navigator.share({ title: '여행 일정', url: shareUrl }) } catch {}
+      try { await navigator.share({ title: 'Travelink 여행 일정', url: shareUrl }) } catch {}
     } else {
       try { await navigator.clipboard.writeText(shareUrl); alert('링크가 복사되었습니다.') }
       catch { alert('공유에 실패했습니다.') }
@@ -118,7 +118,7 @@ export default function Header({
           <div className="header-left">
             <div className="header-title">
               <IconLogo size={28} />
-              <h1>여행 일정</h1>
+              <h1>Travelink</h1>
             </div>
             <div className="header-history">
               <button className="history-btn" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)">

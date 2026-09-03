@@ -48,7 +48,7 @@ export default function Footer() {
           </a>
         </div>
         <p className="footer-copyright">
-          &copy; {new Date().getFullYear()} Travel Plan. All rights reserved.
+          &copy; {new Date().getFullYear()} Travelink. All rights reserved.
         </p>
       </div>
 

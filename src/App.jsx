@@ -4,24 +4,25 @@ import ItineraryPanel from './components/ItineraryPanel'
 import MapPanel from './components/MapPanel'
 import ConflictDialog from './components/ConflictDialog'
 import LandingPage from './components/LandingPage'
+import MigrationNotice from './components/MigrationNotice'
 import { IconMap, IconCalendar, IconLocation } from './components/Icons'
 import { useItineraries } from './hooks/useItineraries'
 import { computeNumberedItems } from './utils/markerNumbers'
+import { getMigratedDomainUrl, getMigrationContext, hasPlanData } from './utils/migration'
 
 const MIN_PANEL_WIDTH = 240
 const MAX_PANEL_RATIO = 0.75
 
 export default function App() {
-  const [showLanding, setShowLanding] = useState(() => {
-    if (localStorage.getItem('hasVisited')) return false
-    // URL 해시에 인코딩된 일정 데이터가 있으면 랜딩 스킵
-    const originalUrl = window.__ORIGINAL_URL || window.location.href
-    try {
-      const hash = new URL(originalUrl).hash
-      if (hash && hash.length > 1) return false
-    } catch (_) {}
-    return true
-  })
+  const [migrationContext] = useState(() => getMigrationContext({
+    originalUrl: window.__ORIGINAL_URL || window.location.href,
+  }))
+  const [showLanding, setShowLanding] = useState(() => migrationContext.shouldShowLanding)
+
+  useEffect(() => {
+    if (!migrationContext.shouldAutoRedirect) return
+    window.location.replace(getMigratedDomainUrl(migrationContext.sourceUrl))
+  }, [migrationContext])
 
   const handleEnter = () => {
     localStorage.setItem('hasVisited', '1')
@@ -63,6 +64,7 @@ export default function App() {
   }, [])
 
   const numberedItems = useMemo(() => computeNumberedItems(items), [items])
+  const hasMigratablePlans = useMemo(() => plans.some(hasPlanData), [plans])
 
   // Determine current item: the latest item that has already "started"
   // Recalculates whenever items change or the minute-timer (currentTime) ticks
@@ -136,10 +138,19 @@ export default function App() {
     window.addEventListener('mouseup', onMouseUp)
   }, [isMobile])
 
+  if (migrationContext.shouldAutoRedirect) {
+    return (
+      <div className="migration-redirect-screen" role="status">
+        새 주소로 이동하고 있습니다…
+      </div>
+    )
+  }
+
   if (showLanding) return <LandingPage onEnter={handleEnter} />
 
   return (
     <div className="app-layout">
+      {migrationContext.active && hasMigratablePlans && <MigrationNotice plans={plans} />}
       <Header
         canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}
         plans={plans} activeId={activeId}

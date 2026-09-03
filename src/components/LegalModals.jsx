@@ -31,7 +31,7 @@ export const TermsOfService = ({isOpen, onClose}) => (
     <Modal title="서비스 이용약관" isOpen={isOpen} onClose={onClose}>
         <div className="legal-section">
             <h3>제 1 조 (목적)</h3>
-            <p>본 약관은 'travel-plan'(이하 "서비스")이 제공하는 여행 계획 작성 및 공유 서비스의 이용조건과 절차에 관한 사항을 규정함을 목적으로 합니다.</p>
+            <p>본 약관은 'Travelink'(이하 "서비스")이 제공하는 여행 계획 작성 및 공유 서비스의 이용조건과 절차에 관한 사항을 규정함을 목적으로 합니다.</p>
         </div>
         <div className="legal-section">
             <h3>제 2 조 (서비스의 특징)</h3>

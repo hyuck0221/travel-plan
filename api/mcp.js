@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import zlib from "zlib";
 
-// Core logic: Travel Plan Binary Encoding (Version 3)
+// Core logic: Travelink Binary Encoding (Version 3)
 function uuidToBytes(uuid) {
   if (!uuid || uuid.length !== 36) return new Uint8Array(16);
   const hex = uuid.replace(/-/g, "");
@@ -106,11 +106,11 @@ async function shortenUrl(url) {
 
 // Stateless HTTP Handler (JSON-RPC 2.0)
 export default async function handler(req, res) {
-  const baseUrl = process.env.BASE_URL || "https://travel.hspace.site";
+  const baseUrl = process.env.BASE_URL || "https://travelink.hspace.site";
   
   // GET 요청 시 상태 정보 반환
   if (req.method === "GET") {
-    return res.status(200).send("Travel Plan MCP Server (Stateless HTTP) is running. Use POST for JSON-RPC 2.0 requests.");
+    return res.status(200).send("Travelink MCP Server (Stateless HTTP) is running. Use POST for JSON-RPC 2.0 requests.");
   }
 
   if (req.method !== "POST") {
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
           serverInfo: { 
-            name: "travel-plan-mcp", 
+            name: "travelink-mcp",
             version: "1.0.0",
             icon: `${baseUrl}/icon-128.svg`
           }
@@ -156,7 +156,7 @@ export default async function handler(req, res) {
             },
             {
               name: "create_travel_plan",
-              description: "Generate a shortened link for the travel-plan app that contains all the items and title.",
+              description: "Generate a shortened link for the Travelink app that contains all the items and title.",
               inputSchema: {
                 type: "object",
                 properties: {

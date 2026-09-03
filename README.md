@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="public/icon-128.svg" width="128" height="128" alt="Travel Plan Logo" />
+  <img src="public/icon-128.svg" width="128" height="128" alt="Travelink Logo" />
 </p>
 
-<h1 align="center">여행일정 관리</h1>
+<h1 align="center">Travelink</h1>
 
 <p align="center">
-  <strong><a href="https://travel.hspace.site">https://travel.hspace.site</a></strong>
+  <strong><a href="https://travelink.hspace.site">https://travelink.hspace.site</a></strong>
 </p>
 
 <p align="center">

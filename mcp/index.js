@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env.local") });
 
-const BASE_URL = process.env.BASE_URL || "https://travel.hspace.site";
+const BASE_URL = process.env.BASE_URL || "https://travelink.hspace.site";
 
 // Helper: UUID string to 16-byte Uint8Array
 function uuidToBytes(uuid) {
@@ -111,7 +111,7 @@ async function encodeState(state) {
 
 const server = new Server(
   {
-    name: "travel-plan-mcp",
+    name: "travelink-mcp",
     version: "1.0.0",
   },
   {
@@ -164,13 +164,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "create_travel_plan",
-        description: "Generate a travel plan link that can be opened in the travel-plan web app.",
+        description: "Generate a Travelink plan link that can be opened in the Travelink web app.",
         inputSchema: {
           type: "object",
           properties: {
             title: {
               type: "string",
-              description: "The title of the travel plan",
+              description: "The title of the Travelink plan",
             },
             items: {
               type: "array",
@@ -274,7 +274,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         { 
           type: "text", 
-          text: `Travel plan created successfully!\n\nTitle: ${title}\nItems: ${items.length}\nURL: ${shortUrl}` 
+          text: `Travelink plan created successfully!\n\nTitle: ${title}\nItems: ${items.length}\nURL: ${shortUrl}`
         }
       ],
     };
@@ -286,7 +286,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Travel Plan MCP Server running on stdio");
+  console.error("Travelink MCP Server running on stdio");
 }
 
 main().catch((error) => {

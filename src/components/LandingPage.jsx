@@ -367,7 +367,7 @@ export default function LandingPage({ onEnter }) {
 
       {/* ── Footer ── */}
       <footer className="lp-footer">
-        <span>travel.hspace.site</span>
+        <span>travelink.hspace.site</span>
         <span className="lp-footer-dot">·</span>
         <span>네이버 지도 기반</span>
         <span className="lp-footer-dot">·</span>
