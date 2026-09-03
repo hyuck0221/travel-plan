@@ -148,6 +148,64 @@ function getMarkerGroupSignature(group) {
   ].join(':')).join('|')
 }
 
+const MAP_BOUNDS_PADDING = { top: 80, right: 30, bottom: 30, left: 30 }
+
+function getCoordinateItems(items) {
+  return items.filter(item => (
+    item.lat != null && item.lng != null
+    && Number.isFinite(Number(item.lat))
+    && Number.isFinite(Number(item.lng))
+  ))
+}
+
+function getCoordinateSignature(items) {
+  return getCoordinateItems(items)
+    .map(item => `${item.id}:${Number(item.lat)},${Number(item.lng)}`)
+    .sort()
+    .join('|')
+}
+
+function centerMapOnItems(map, items, { animate = false } = {}) {
+  const coordinateItems = getCoordinateItems(items)
+  if (coordinateItems.length === 0) return false
+
+  const coordinates = coordinateItems.map(item => ({
+    lat: Number(item.lat),
+    lng: Number(item.lng),
+  }))
+  const uniqueCoordinates = Array.from(
+    new Map(coordinates.map(coord => [`${coord.lat},${coord.lng}`, coord])).values()
+  )
+
+  if (uniqueCoordinates.length === 1) {
+    const coord = new window.naver.maps.LatLng(uniqueCoordinates[0].lat, uniqueCoordinates[0].lng)
+    if (animate && typeof map.morph === 'function') {
+      map.morph(coord, 14, { duration: 480, easing: 'easeOutCubic' })
+    } else {
+      map.setCenter(coord)
+      map.setZoom(14)
+    }
+    return true
+  }
+
+  const lats = coordinates.map(coord => coord.lat)
+  const lngs = coordinates.map(coord => coord.lng)
+  const sw = new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs))
+  const ne = new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs))
+  const bounds = new window.naver.maps.LatLngBounds(sw, ne)
+
+  if (animate && typeof map.panToBounds === 'function') {
+    map.panToBounds(
+      bounds,
+      { duration: 480, easing: 'easeOutCubic' },
+      MAP_BOUNDS_PADDING
+    )
+  } else {
+    map.fitBounds(bounds, MAP_BOUNDS_PADDING)
+  }
+  return true
+}
+
 export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace, tracking, onToggleTracking, isLocked }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
@@ -167,6 +225,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   const onRegisterRef = useRef(onRegisterPlace)
   const onMarkerClickRef = useRef(onMarkerClick)
   const isLockedRef = useRef(isLocked)
+  const centeredCoordinateSignatureRef = useRef(null)
 
   useEffect(() => { onRegisterRef.current = onRegisterPlace }, [onRegisterPlace])
   useEffect(() => { onMarkerClickRef.current = onMarkerClick }, [onMarkerClick])
@@ -178,6 +237,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
 
   const [previewPlace, setPreviewPlace] = useState(null)
   const [mapReady, setMapReady] = useState(false)
+  const coordinateSignature = getCoordinateSignature(items)
 
   const closeStackedInfoWindow = () => {
     if (stackedInfoWindowRef.current) stackedInfoWindowRef.current.close()
@@ -270,23 +330,17 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
         tileDuration: 320,
       })
       mapInstanceRef.current = map
-      setMapReady(true)
 
       // 초기 위치: 일정 좌표 → 현재 위치 → 서울 기본
-      const coordItems = itemsRef.current.filter(i => i.lat != null && i.lng != null)
-      if (coordItems.length === 1) {
-        map.setCenter(new window.naver.maps.LatLng(coordItems[0].lat, coordItems[0].lng))
-        map.setZoom(14)
-      } else if (coordItems.length > 1) {
-        const lats = coordItems.map(i => i.lat)
-        const lngs = coordItems.map(i => i.lng)
-        const sw = new window.naver.maps.LatLng(Math.min(...lats), Math.min(...lngs))
-        const ne = new window.naver.maps.LatLng(Math.max(...lats), Math.max(...lngs))
-        map.fitBounds(new window.naver.maps.LatLngBounds(sw, ne), { top: 80, right: 30, bottom: 30, left: 30 })
-      } else if (navigator.geolocation) {
+      const initialItems = itemsRef.current
+      const hasCoordinates = centerMapOnItems(map, initialItems)
+      const initialCoordinateSignature = getCoordinateSignature(initialItems)
+      centeredCoordinateSignatureRef.current = initialCoordinateSignature
+      if (!hasCoordinates && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => {
-            if (mapInstanceRef.current) {
+            // 위치를 기다리는 동안 일정 핀이 추가됐다면 핀 중심 화면을 덮어쓰지 않는다.
+            if (mapInstanceRef.current && getCoordinateSignature(itemsRef.current) === initialCoordinateSignature) {
               mapInstanceRef.current.setCenter(new window.naver.maps.LatLng(coords.latitude, coords.longitude))
               mapInstanceRef.current.setZoom(13)
             }
@@ -294,6 +348,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
           () => {} // 권한 없으면 서울 기본 유지
         )
       }
+      setMapReady(true)
 
       // Map click → close stacked popup + preview pin with reverse geocode
       window.naver.maps.Event.addListener(map, 'click', (e) => {
@@ -487,14 +542,26 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   // Pan to active item
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current || !activeItemId) return
-    const item = items.find(i => i.id === activeItemId)
+    // 좌표 구성이 바뀐 순간에는 아래 전체 핀 재센터링이 최종 화면을 담당한다.
+    if (centeredCoordinateSignatureRef.current !== coordinateSignature) return
+    const item = itemsRef.current.find(i => i.id === activeItemId)
     if (item?.lat != null && item?.lng != null) {
       mapInstanceRef.current.panTo(
         new window.naver.maps.LatLng(item.lat, item.lng),
         { duration: 420, easing: 'easeOutCubic' }
       )
     }
-  }, [activeItemId, items, mapReady])
+  }, [activeItemId, coordinateSignature, mapReady])
+
+  // 일정의 좌표 구성이 바뀌면 새로고침과 같은 기준으로 전체 핀을 화면에 맞춘다.
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!mapReady || !map) return
+    if (centeredCoordinateSignatureRef.current === coordinateSignature) return
+
+    centeredCoordinateSignatureRef.current = coordinateSignature
+    centerMapOnItems(map, items, { animate: true })
+  }, [coordinateSignature, items, mapReady])
 
   // Location tracking
   useEffect(() => {
