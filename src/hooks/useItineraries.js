@@ -62,6 +62,9 @@ function init() {
 function histReducer(s, action) {
   switch (action.type) {
     case 'PUSH': return { stack: [...s.stack.slice(0, s.idx + 1), action.payload], idx: s.idx + 1 }
+    // AI가 여러 카드 작업을 순차적으로 보여줄 때 현재 undo 단위만 갱신한다.
+    // 첫 작업은 PUSH, 그 다음 작업들은 REPLACE로 보내 하나의 요청을 한 번에 되돌린다.
+    case 'REPLACE': return { stack: [...s.stack.slice(0, s.idx), action.payload], idx: s.idx }
     case 'UNDO': return s.idx > 0 ? { ...s, idx: s.idx - 1 } : s
     case 'REDO': return s.idx < s.stack.length - 1 ? { ...s, idx: s.idx + 1 } : s
     case 'RESET': return { stack: [action.payload], idx: 0 }
@@ -282,10 +285,33 @@ export function useItineraries() {
     writeState({ ...state, title })
   }, [state, writeState])
 
+  // AI 카드 작업은 화면에는 순차적으로 반영하되, 기본적으로 한 번의 undo 단위로 기록한다.
+  const applyPlan = useCallback(({ title, items }, { history = 'push' } = {}) => {
+    const nextItems = (Array.isArray(items) ? items : []).map((item, index) => ({
+      id: item.id || crypto.randomUUID(),
+      date: '',
+      time: '',
+      destination: '',
+      address: '',
+      memo: '',
+      lat: null,
+      lng: null,
+      order: Date.now() + index,
+      cost: '',
+      category: '',
+      ...item,
+    }))
+    const nextState = {
+      title: typeof title === 'string' ? title : state.title,
+      items: nextItems,
+    }
+    dispatch({ type: history === 'replace' ? 'REPLACE' : 'PUSH', payload: nextState })
+  }, [state])
+
   return {
     title: state.title,
     items: state.items,
-    addItem, updateItem, deleteItem, setTitle,
+    addItem, updateItem, deleteItem, setTitle, applyPlan,
     canUndo: hist.idx > 0,
     canRedo: hist.idx < hist.stack.length - 1,
     undo: useCallback(() => dispatch({ type: 'UNDO' }), []),

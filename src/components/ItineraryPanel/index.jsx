@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, Fragment } from 'react'
-import { IconPlus, IconMap, IconEdit } from '../Icons'
+import { IconPlus, IconMap, IconEdit, IconUndo, IconRedo } from '../Icons'
 import DateSection from './DateSection'
 import ItineraryItem from './ItineraryItem'
 import Footer from '../Footer'
@@ -79,7 +79,7 @@ function DropZone({ isActive, onDragOver, onDragLeave, onDrop }) {
   )
 }
 
-export default function ItineraryPanel({ items, title, onTitleChange, activeItemId, currentItemId, onUpdate, onDelete, onItemClick, onAddItem, isLocked, style }) {
+export default function ItineraryPanel({ items, title, onTitleChange, activeItemId, currentItemId, canUndo, canRedo, onUndo, onRedo, aiFlashItemId, aiFlashTick = 0, onUpdate, onDelete, onItemClick, onAddItem, isLocked, style }) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(title)
   const titleInputRef = useRef(null)
@@ -175,6 +175,14 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
               <IconEdit size={13} className="trip-title-edit-icon" />
             </h2>
           )}
+          <div className="trip-history" aria-label="일정 편집 기록">
+            <button className="history-btn" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)" aria-label="실행 취소">
+              <IconUndo />
+            </button>
+            <button className="history-btn" onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)" aria-label="다시 실행">
+              <IconRedo />
+            </button>
+          </div>
         </div>
         {dateRange && <p className="trip-date-range">{dateRange}</p>}
       </div>
@@ -222,6 +230,8 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
                     items={section.items}
                     activeItemId={activeItemId}
                     currentItemId={currentItemId}
+                    aiFlashItemId={aiFlashItemId}
+                    aiFlashTick={aiFlashTick}
                     onUpdate={onUpdate}
                     onDelete={onDelete}
                     onItemClick={onItemClick}
@@ -239,6 +249,8 @@ export default function ItineraryPanel({ items, title, onTitleChange, activeItem
                       item={section.item}
                       isActive={activeItemId === section.item.id}
                       isCurrent={currentItemId === section.item.id}
+                      isAiActive={aiFlashItemId === section.item.id}
+                      aiPulseTick={aiFlashTick}
                       isDraggable={!isLocked}
                       onUpdate={onUpdate}
                       onDelete={onDelete}

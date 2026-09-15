@@ -5,14 +5,57 @@ import MapPanel from './components/MapPanel'
 import ConflictDialog from './components/ConflictDialog'
 import LandingPage from './components/LandingPage'
 import MigrationNotice from './components/MigrationNotice'
+import AIAssistant from './components/AIAssistant'
 import { IconMap, IconCalendar, IconLocation } from './components/Icons'
 import { useItineraries } from './hooks/useItineraries'
+import { useLocalAgent } from './ai/useLocalAgent'
 import { computeNumberedItems } from './utils/markerNumbers'
 import { getMigratedDomainUrl, getMigrationContext, hasPlanData } from './utils/migration'
 
 const MIN_PANEL_WIDTH = 240
 const MAX_PANEL_RATIO = 0.75
 const MOBILE_BREAKPOINT = 640
+const AI_CHAT_STORAGE_KEY = 'travel-ai-chat-history-v1'
+const AI_CHAT_MAX_MESSAGES = 40
+const AI_ACTIVITY_STORAGE_KEY = 'travel-ai-activity-history-v1'
+const AI_ACTIVITY_MAX_ITEMS = 40
+const AI_REQUEST_MAX_GROUPS = 20
+
+function loadAiChatByPlan() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_CHAT_STORAGE_KEY) || '{}')
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
+  } catch {
+    return {}
+  }
+}
+
+function makeAiMessage(role, content, tone = '', id) {
+  return {
+    id: id || 'ai-chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    role,
+    content: String(content || '').trim(),
+    ...(tone ? { tone } : {}),
+  }
+}
+
+function loadAiActivityByPlan() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(AI_ACTIVITY_STORAGE_KEY) || '{}')
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {}
+    return Object.fromEntries(Object.entries(saved).map(([planId, groups]) => [
+      planId,
+      Array.isArray(groups) ? groups.filter(group => group && typeof group === 'object').map(group => ({
+        ...group,
+        activities: Array.isArray(group.activities) ? group.activities.slice(-AI_ACTIVITY_MAX_ITEMS) : [],
+        expanded: false,
+        status: group.status || 'done',
+      })).slice(-AI_REQUEST_MAX_GROUPS) : [],
+    ]))
+  } catch {
+    return {}
+  }
+}
 
 export default function App() {
   const [migrationContext] = useState(() => getMigrationContext({
@@ -31,7 +74,7 @@ export default function App() {
   }
 
   const {
-    title, items, addItem, updateItem, deleteItem, setTitle,
+    title, items, addItem, updateItem, deleteItem, setTitle, applyPlan,
     canUndo, canRedo, undo, redo,
     plans, activeId, createPlan, deletePlan, switchPlan,
     isUrlLimitReached,
@@ -40,6 +83,13 @@ export default function App() {
   } = useItineraries()
 
   const [activeItemId, setActiveItemId] = useState(null)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiActivityByPlan, setAiActivityByPlan] = useState(loadAiActivityByPlan)
+  const [aiActiveItemId, setAiActiveItemId] = useState(null)
+  const [aiFlash, setAiFlash] = useState({ itemId: null, tick: 0 })
+  const [aiSearch, setAiSearch] = useState({ query: '', searching: false })
+  const [aiChatByPlan, setAiChatByPlan] = useState(loadAiChatByPlan)
+  const aiMessages = Array.isArray(aiChatByPlan[activeId]) ? aiChatByPlan[activeId] : []
   const [panelWidth, setPanelWidth] = useState(() => {
     const saved = localStorage.getItem('panel-width')
     return saved ? Math.max(MIN_PANEL_WIDTH, parseInt(saved, 10)) : 400
@@ -51,6 +101,20 @@ export default function App() {
   
   const draggingRef = useRef(false)
   const containerRef = useRef(null)
+  const activeAiRequestRef = useRef(null)
+  const aiActivityGroups = Array.isArray(aiActivityByPlan[activeId]) ? aiActivityByPlan[activeId] : []
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AI_CHAT_STORAGE_KEY, JSON.stringify(aiChatByPlan))
+    } catch {}
+  }, [aiChatByPlan])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AI_ACTIVITY_STORAGE_KEY, JSON.stringify(aiActivityByPlan))
+    } catch {}
+  }, [aiActivityByPlan])
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
@@ -63,6 +127,166 @@ export default function App() {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000)
     return () => clearInterval(timer)
   }, [])
+
+  const appendAiMessage = useCallback((message, planId = activeId) => {
+    if (!planId || !message?.content) return null
+    const nextMessage = message.id ? message : makeAiMessage(message.role, message.content, message.tone)
+    setAiChatByPlan(prev => {
+      const current = Array.isArray(prev[planId]) ? prev[planId] : []
+      return {
+        ...prev,
+        [planId]: [...current, nextMessage].slice(-AI_CHAT_MAX_MESSAGES),
+      }
+    })
+    return nextMessage
+  }, [activeId])
+
+  const updateAiActivityGroup = useCallback((planId, requestId, updater) => {
+    if (!planId || !requestId) return
+    setAiActivityByPlan(prev => {
+      const current = Array.isArray(prev[planId]) ? prev[planId] : []
+      let found = false
+      const next = current.map(group => {
+        if (group.id !== requestId) return group
+        found = true
+        const updated = typeof updater === 'function' ? updater(group) : { ...group, ...updater }
+        return {
+          ...updated,
+          activities: Array.isArray(updated.activities) ? updated.activities.slice(-AI_ACTIVITY_MAX_ITEMS) : [],
+        }
+      })
+      return found ? { ...prev, [planId]: next } : prev
+    })
+  }, [])
+
+  const handleToggleAiActivityGroup = useCallback((requestId) => {
+    if (!activeId) return
+    updateAiActivityGroup(activeId, requestId, group => ({
+      ...group,
+      expanded: group.expanded === false,
+    }))
+  }, [activeId, updateAiActivityGroup])
+
+  const handleAiEvent = useCallback((event) => {
+    const activeRequest = activeAiRequestRef.current
+    const activityType = event.type === 'stage' ? (event.key || 'stage') : event.type
+    if (activeRequest && event.label) updateAiActivityGroup(activeRequest.planId, activeRequest.requestId, group => ({
+      ...group,
+      activities: [
+        ...group.activities,
+        {
+          id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          type: activityType,
+          label: event.label,
+        },
+      ],
+    }))
+    if (event.itemId) {
+      setAiActiveItemId(event.itemId)
+      setActiveItemId(event.itemId)
+      if (isMobile) setViewMode('list')
+    }
+    if (event.type === 'operation' && event.itemId) {
+      setAiFlash(prev => ({ itemId: event.itemId, tick: prev.tick + 1 }))
+      window.setTimeout(() => {
+        setAiFlash(prev => prev.itemId === event.itemId ? { ...prev, itemId: null } : prev)
+      }, 950)
+    }
+    if (event.type === 'search-start') {
+      setAiSearch({ query: event.query || '', searching: true })
+    } else if (event.type === 'search-result') {
+      setAiSearch(prev => ({ ...prev, query: event.query || prev.query, searching: false }))
+    } else if (['done', 'error', 'cancelled'].includes(event.type)) {
+      setAiSearch(prev => ({ ...prev, searching: false }))
+    }
+    if (['done', 'error', 'cancelled'].includes(event.type)) {
+      window.setTimeout(() => setAiActiveItemId(null), event.type === 'done' ? 900 : 0)
+    }
+    if (activeRequest && event.type === 'done') {
+      updateAiActivityGroup(activeRequest.planId, activeRequest.requestId, { status: 'done' })
+    }
+    if (event.type === 'error' || event.type === 'cancelled') {
+      const errorMessage = makeAiMessage(
+        'assistant',
+        event.label,
+        event.type === 'error' ? 'error' : '',
+      )
+      appendAiMessage(errorMessage, activeRequest?.planId || activeId)
+      if (activeRequest) updateAiActivityGroup(activeRequest.planId, activeRequest.requestId, {
+        assistantMessageId: errorMessage.id,
+        status: event.type,
+      })
+      activeAiRequestRef.current = null
+    }
+  }, [activeId, appendAiMessage, isMobile, updateAiActivityGroup])
+
+  const handleAiApplyPlan = useCallback((plan, options) => {
+    applyPlan(plan, options)
+    if (!plan.items?.length) {
+      setActiveItemId(null)
+      setAiActiveItemId(null)
+    }
+  }, [applyPlan])
+
+  const localAgent = useLocalAgent({
+    onEvent: handleAiEvent,
+    onApplyPlan: handleAiApplyPlan,
+  })
+
+  const handleAiSubmit = useCallback((prompt) => {
+    const planId = activeId
+    if (!planId) return
+    const requestId = 'ai-request-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+    const userMessage = makeAiMessage('user', prompt)
+    activeAiRequestRef.current = { planId, requestId }
+    setAiActivityByPlan(prev => {
+      const current = Array.isArray(prev[planId]) ? prev[planId] : []
+      return {
+        ...prev,
+        [planId]: [
+          ...current.map(group => ({ ...group, expanded: false })),
+          {
+            id: requestId,
+            userMessageId: userMessage.id,
+            assistantMessageId: null,
+            activities: [],
+            status: 'running',
+            expanded: false,
+          },
+        ].slice(-AI_REQUEST_MAX_GROUPS),
+      }
+    })
+    setAiActiveItemId(null)
+    setAiFlash(prev => ({ ...prev, itemId: null }))
+    setAiSearch({ query: '', searching: false })
+    appendAiMessage(userMessage, planId)
+    if (isLocked) {
+      handleAiEvent({ type: 'error', label: '잠금 상태에서는 AI가 일정을 바꿀 수 없습니다. 먼저 잠금을 해제해주세요.' })
+      return
+    }
+    localAgent.run({
+      prompt,
+      currentPlan: { title, items },
+      conversationHistory: aiMessages,
+    }).then(result => {
+      if (!result) return
+      const message = result.action?.message
+        || (result.plan ? `${result.plan.items.length}개 일정을 반영했습니다.` : '요청을 확인했습니다.')
+      const assistantMessage = makeAiMessage('assistant', message)
+      appendAiMessage(assistantMessage, planId)
+      updateAiActivityGroup(planId, requestId, {
+        assistantMessageId: assistantMessage.id,
+        status: 'done',
+        expanded: false,
+      })
+      if (activeAiRequestRef.current?.requestId === requestId) activeAiRequestRef.current = null
+    })
+  }, [activeId, aiMessages, appendAiMessage, handleAiEvent, isLocked, items, localAgent.run, title, updateAiActivityGroup])
+
+  const activeAiItem = useMemo(
+    () => items.find(item => item.id === aiActiveItemId) || null,
+    [aiActiveItemId, items],
+  )
 
   const numberedItems = useMemo(() => computeNumberedItems(items), [items])
   const hasMigratablePlans = useMemo(() => plans.some(hasPlanData), [plans])
@@ -153,11 +377,14 @@ export default function App() {
     <div className="app-layout">
       {migrationContext.active && hasMigratablePlans && <MigrationNotice plans={plans} />}
       <Header
-        canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}
         plans={plans} activeId={activeId}
         onCreatePlan={createPlan} onDeletePlan={deletePlan} onSwitchPlan={switchPlan}
         isUrlLimitReached={isUrlLimitReached}
         isLocked={isLocked} onToggleLock={toggleLock}
+        onToggleAI={() => setAiOpen(prev => !prev)}
+        onCloseAI={() => setAiOpen(false)}
+        isAiOpen={aiOpen}
+        isAiRunning={localAgent.isRunning}
       />
       <div className={`panels${isMobile && viewMode === 'both' ? ' panels--split' : ''}`} ref={containerRef}>
         <div
@@ -168,6 +395,9 @@ export default function App() {
             items={numberedItems} title={title} onTitleChange={setTitle}
             activeItemId={activeItemId}
             currentItemId={currentItemId}
+            canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}
+            aiFlashItemId={aiFlash.itemId}
+            aiFlashTick={aiFlash.tick}
             onUpdate={updateItem} onDelete={deleteItem}
             onItemClick={handleItemClick} onAddItem={handleAddItem}
             isLocked={isLocked}
@@ -180,6 +410,8 @@ export default function App() {
             onMarkerClick={handleMarkerClick} onRegisterPlace={handleRegisterPlace}
             tracking={tracking} onToggleTracking={setTracking}
             isLocked={isLocked}
+            aiSearchQuery={aiSearch.query}
+            aiSearching={aiSearch.searching}
           />
         </div>
       </div>
@@ -193,32 +425,50 @@ export default function App() {
           : 'list'
         return (
           <div className="mobile-controls">
-            {/* 같이보기 — 일정 탭일 때 pill 위에 가로로 넓게 등장 */}
-            <div className={`split-view-hint${viewMode === 'list' ? ' split-view-hint--visible' : ''}`}>
-              <button className="split-view-btn" onClick={() => setViewMode('both')}>
-                같이보기
-              </button>
-            </div>
+            <div className="mobile-controls-stack">
+              {/* 같이보기 — 일정 탭일 때 스위처와 같은 폭으로 등장 */}
+              <div className={`split-view-hint${viewMode === 'list' ? ' split-view-hint--visible' : ''}`}>
+                <button className="split-view-btn" onClick={() => setViewMode('both')}>
+                  같이보기
+                </button>
+              </div>
 
-            <div className={`mobile-view-switcher mobile-view-switcher--${switcherState}`}>
-              <button className="switcher-btn switcher-btn--list" onClick={() => setViewMode('list')}>
-                <IconCalendar size={16} /> 일정
-              </button>
-              <button className="switcher-btn switcher-btn--map" onClick={() => setViewMode('map')}>
-                <IconMap size={16} /> 지도
-              </button>
-              <button
-                className={`switcher-btn switcher-location-btn${locationVisible ? ' switcher-location-btn--visible' : ''}`}
-                onClick={() => setTracking(v => !v)}
-                title={tracking ? '현위치 표시 끄기' : '현위치 표시'}
-                tabIndex={locationVisible ? 0 : -1}
-              >
-                <IconLocation size={16} />
-              </button>
+              <div className={`mobile-view-switcher mobile-view-switcher--${switcherState}`}>
+                <button className="switcher-btn switcher-btn--list" onClick={() => setViewMode('list')}>
+                  <IconCalendar size={16} /> 일정
+                </button>
+                <button className="switcher-btn switcher-btn--map" onClick={() => setViewMode('map')}>
+                  <IconMap size={16} /> 지도
+                </button>
+                <button
+                  className={`switcher-btn switcher-location-btn${locationVisible ? ' switcher-location-btn--visible' : ''}`}
+                  onClick={() => setTracking(v => !v)}
+                  title={tracking ? '현위치 표시 끄기' : '현위치 표시'}
+                  tabIndex={locationVisible ? 0 : -1}
+                >
+                  <IconLocation size={16} />
+                </button>
+              </div>
             </div>
           </div>
         )
       })()}
+
+      <AIAssistant
+        id="ai-assistant-panel"
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onSubmit={handleAiSubmit}
+        onCancel={localAgent.cancel}
+        status={localAgent.status}
+        progress={localAgent.progress}
+        activityGroups={aiActivityGroups}
+        onToggleActivityGroup={handleToggleAiActivityGroup}
+        messages={aiMessages}
+        activeItem={activeAiItem}
+        error={localAgent.error}
+        isMobile={isMobile}
+      />
 
       <ConflictDialog conflictData={conflictData} onResolve={resolveConflict} />
     </div>

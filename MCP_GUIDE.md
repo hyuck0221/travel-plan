@@ -11,6 +11,8 @@ Model Context Protocol(MCP)을 사용하면 AI 에이전트(Claude 등)가 직�
 - **MCP 엔드포인트**: `https://travelink.hshim.dev/mcp`
 - **통신 방식**: HTTP POST (JSON-RPC 2.0)
 
+웹페이지의 **AI 일정 편집**은 브라우저에서 로컬 모델로 실행됩니다. 화면 안의 AI는 장소 좌표가 필요할 때만 `search_places`를 사용하고, 일정 링크를 만드는 `create_link`는 호출하지 않습니다. AI가 반영한 일정은 기존 공유 버튼으로 사용자가 직접 공유할 수 있습니다.
+
 ---
 
 ## 3. 제공 도구 (Tools) 상세
@@ -20,7 +22,7 @@ Model Context Protocol(MCP)을 사용하면 AI 에이전트(Claude 등)가 직�
 - **입력**: `query` (예: "강남역 맛집", "성산일출봉")
 - **결과**: 장소 이름, 주소, 위도/경도(lat, lng) 목록
 
-### 📅 `create_travel_plan`
+### 📅 `create_link`
 검색된 장소들을 묶어 본 서비스에서 바로 확인할 수 있는 여행 일정 링크를 생성합니다.
 - **입력**: 
   - `title`: 여행 제목
@@ -36,4 +38,4 @@ AI 에이전트에게 다음과 같이 요청해 보세요!
 > "이번 주말에 갈만한 경주 1박 2일 여행 코스 짜주고 travelink 링크 만들어줘." <br>
 > "제주도 동쪽 맛집 투어 일정 만들어서 공유 링크 생성해줘."
 
-에이전트가 `search_places`로 정확한 위치 정보를 가져온 뒤, `create_travel_plan`을 호출하여 최종 결과물을 제공합니다.
+에이전트가 `search_places`로 정확한 위치 정보를 가져온 뒤, `create_link`를 호출하여 최종 결과물을 제공합니다.

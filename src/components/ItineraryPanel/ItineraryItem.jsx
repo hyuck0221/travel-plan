@@ -31,7 +31,7 @@ function formatDisplayDate(d) {
   return `${y}.${m}.${day}`
 }
 
-export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onDelete, onClick, isDraggable, onEditingChange, isLocked }) {
+export default function ItineraryItem({ item, isActive, isCurrent, isAiActive, aiPulseTick = 0, onUpdate, onDelete, onClick, isDraggable, onEditingChange, isLocked }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
     date: item.date, time: item.time,
@@ -44,6 +44,7 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
   const [showTime, setShowTime] = useState(false)
   const isSearchOpen = useRef(false)
   const itemRef = useRef(null)
+  const aiPulseParity = Math.abs(Math.trunc(Number(aiPulseTick) || 0)) % 2
 
   useEffect(() => {
     if (isActive && itemRef.current) {
@@ -113,6 +114,8 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
     return (
       <div
         ref={itemRef}
+        data-ai-active={isAiActive ? 'true' : undefined}
+        data-ai-pulse={isAiActive ? aiPulseParity : undefined}
         className={`itinerary-item itinerary-item--editing${isActive ? ' itinerary-item--active' : ''}`}
         onKeyDown={handleEditKeyDown}
       >
@@ -249,6 +252,8 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
   return (
     <div
       ref={itemRef}
+      data-ai-active={isAiActive ? 'true' : undefined}
+      data-ai-pulse={isAiActive ? aiPulseParity : undefined}
       className={`itinerary-item${isActive ? ' itinerary-item--active' : ''}${isCurrent ? ' itinerary-item--current' : ''}`}
       onClick={() => onClick(item.id)}
       onDoubleClick={enterEdit}

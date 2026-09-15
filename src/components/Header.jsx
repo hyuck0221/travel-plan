@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import QRModal from './QRModal'
 import PlanSelector from './PlanSelector'
-import { IconLogo, IconUndo, IconRedo, IconLink, IconQR, IconShare, IconLoader, IconLock, IconUnlock, IconChevronDown } from './Icons'
+import { IconLogo, IconLink, IconQR, IconShare, IconLoader, IconLock, IconUnlock, IconChevronDown, IconSparkle } from './Icons'
 
 // In-memory cache for the current session
 const shortenMemCache = new Map()
@@ -43,16 +43,31 @@ async function shortenUrl(url) {
 }
 
 export default function Header({
-  canUndo, canRedo, onUndo, onRedo,
   plans, activeId, onCreatePlan, onDeletePlan, onSwitchPlan,
-  isUrlLimitReached, isLocked, onToggleLock
+  isUrlLimitReached, isLocked, onToggleLock, onToggleAI, onCloseAI, isAiOpen, isAiRunning
 }) {
   const [qrOpen, setQrOpen] = useState(false)
   const [qrImage, setQrImage] = useState(null)
   const [loading, setLoading] = useState('')
   const [shareOpen, setShareOpen] = useState(false)
+  const [copyFeedback, setCopyFeedback] = useState('')
+  const [preparedShare, setPreparedShare] = useState({ sourceUrl: '', url: '', status: 'idle', isShortened: false })
   const shareMenuRef = useRef(null)
   const shareTriggerRef = useRef(null)
+  const shareGateRef = useRef(null)
+  const copyFeedbackTimerRef = useRef(null)
+
+  const currentShareUrl = window.location.href
+  const sharePrepared = preparedShare.sourceUrl === currentShareUrl && preparedShare.status === 'ready'
+  // URL 용량 초과 시에는 단축 URL을 만들 수 없으므로 기존 원본 링크 동작을 유지한다.
+  const shareActionsReady = isUrlLimitReached || sharePrepared
+  const preparedShareUrl = sharePrepared ? (preparedShare.url || currentShareUrl) : currentShareUrl
+
+  useEffect(() => {
+    if (!shareOpen || shareActionsReady) return undefined
+    requestAnimationFrame(() => shareGateRef.current?.focus())
+    return undefined
+  }, [shareOpen, shareActionsReady])
 
   useEffect(() => {
     if (!shareOpen) return undefined
@@ -77,29 +92,39 @@ export default function Header({
     }
   }, [shareOpen])
 
+  useEffect(() => () => window.clearTimeout(copyFeedbackTimerRef.current), [])
+
+  const showCopyFeedback = (message) => {
+    window.clearTimeout(copyFeedbackTimerRef.current)
+    setCopyFeedback(message)
+    copyFeedbackTimerRef.current = window.setTimeout(() => {
+      setCopyFeedback('')
+      copyFeedbackTimerRef.current = null
+    }, 3000)
+  }
+
   const handleCopyLink = async () => {
-    setShareOpen(false)
+    if (!shareActionsReady) return
+    const shareUrl = preparedShareUrl
     if (isUrlLimitReached) {
       // 65535자 초과 시: 단축 없이 바로 복사
       try {
-        await navigator.clipboard.writeText(window.location.href)
-        alert('링크가 클립보드에 복사되었습니다. (용량 초과로 단축되지 않은 긴 링크입니다.)')
-      } catch { alert('복사에 실패했습니다.') }
+        await navigator.clipboard.writeText(shareUrl)
+        showCopyFeedback('복사완료!')
+      } catch { showCopyFeedback('복사 실패') }
       return
     }
 
-    setLoading('shorten')
     try {
-      const short = await shortenUrl(window.location.href)
-      await navigator.clipboard.writeText(short)
-      alert('단축 링크가 클립보드에 복사되었습니다!')
+      await navigator.clipboard.writeText(shareUrl)
+      showCopyFeedback('복사완료!')
     } catch {
-      try { await navigator.clipboard.writeText(window.location.href); alert('링크가 복사되었습니다.') }
-      catch { alert('복사에 실패했습니다.') }
-    } finally { setLoading('') }
+      showCopyFeedback('복사 실패')
+    }
   }
 
   const handleQR = async () => {
+    if (!shareActionsReady) return
     setShareOpen(false)
     if (isUrlLimitReached) return // 초과 시 비활성화
 
@@ -108,7 +133,7 @@ export default function Header({
       const res = await fetch('/api/qr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: window.location.href }),
+        body: JSON.stringify({ url: preparedShareUrl }),
       })
       if (!res.ok) throw new Error()
       const data = await res.json()
@@ -119,13 +144,9 @@ export default function Header({
   }
 
   const handleShare = async () => {
+    if (!shareActionsReady) return
     setShareOpen(false)
-    let shareUrl = window.location.href
-    
-    // 65535자 이내일 때만 단축 시도
-    if (!isUrlLimitReached) {
-      try { shareUrl = await shortenUrl(shareUrl) } catch {}
-    }
+    const shareUrl = preparedShareUrl
 
     if (navigator.share) {
       try { await navigator.share({ title: 'Travelink 여행 일정', url: shareUrl }) } catch {}
@@ -133,6 +154,39 @@ export default function Header({
       try { await navigator.clipboard.writeText(shareUrl); alert('링크가 복사되었습니다.') }
       catch { alert('공유에 실패했습니다.') }
     }
+  }
+
+  const handlePrepareShare = async () => {
+    if (loading) return
+
+    const sourceUrl = window.location.href
+    setLoading('prepare-share')
+    setPreparedShare({ sourceUrl, url: '', status: 'loading', isShortened: false })
+    try {
+      let shareUrl = sourceUrl
+      if (!isUrlLimitReached) {
+        try { shareUrl = await shortenUrl(sourceUrl) } catch {}
+      }
+      setPreparedShare({
+        sourceUrl,
+        url: shareUrl,
+        status: 'ready',
+        isShortened: shareUrl !== sourceUrl,
+      })
+    } finally {
+      setLoading('')
+    }
+  }
+
+  const handleToggleAI = () => {
+    // AI 패널과 공유 메뉴가 겹치지 않도록 AI를 열 때 공유 메뉴를 닫는다.
+    setShareOpen(false)
+    onToggleAI()
+  }
+
+  const handleToggleShare = () => {
+    if (!shareOpen) onCloseAI?.()
+    setShareOpen(v => !v)
   }
 
   return (
@@ -149,14 +203,6 @@ export default function Header({
               <IconLogo size={28} />
               <h1>Travelink</h1>
             </div>
-            <div className="header-history">
-              <button className="history-btn" onClick={onUndo} disabled={!canUndo} title="실행 취소 (Ctrl+Z)">
-                <IconUndo />
-              </button>
-              <button className="history-btn" onClick={onRedo} disabled={!canRedo} title="다시 실행 (Ctrl+Shift+Z)">
-                <IconRedo />
-              </button>
-            </div>
           </div>
 
           <PlanSelector
@@ -165,6 +211,17 @@ export default function Header({
           />
 
           <div className="header-actions">
+            <button
+              className={'btn ai-trigger' + (isAiRunning ? ' ai-trigger--running' : '')}
+              onClick={handleToggleAI}
+              title={isAiOpen ? 'Travelink AI 닫기' : '브라우저에서 로컬 AI로 일정 만들기'}
+              aria-label={isAiOpen ? 'Travelink AI 닫기' : 'AI로 일정 만들기'}
+              aria-expanded={isAiOpen}
+              aria-controls="ai-assistant-panel"
+            >
+              <IconSparkle size={16} />
+              <span className="ai-trigger-label">AI</span>
+            </button>
             <button
               className={`btn${isLocked ? ' btn-lock--locked' : ' btn-secondary'}`}
               onClick={onToggleLock}
@@ -179,7 +236,7 @@ export default function Header({
               <button
                 ref={shareTriggerRef}
                 className="btn btn-primary share-trigger"
-                onClick={() => setShareOpen(v => !v)}
+                onClick={handleToggleShare}
                 disabled={!!loading}
                 title="공유 옵션 열기"
                 aria-label="공유 옵션"
@@ -193,46 +250,65 @@ export default function Header({
 
               {shareOpen && (
                 <div className="share-menu" role="menu" aria-label="공유 옵션">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="share-menu-item"
-                    onClick={handleCopyLink}
-                    disabled={!!loading}
-                  >
-                    <IconLink size={17} />
-                    <span className="share-menu-item-copy">
-                      <strong>{isUrlLimitReached ? '링크 복사' : '링크 단축하여 복사'}</strong>
-                      <small>{isUrlLimitReached ? '전체 링크를 클립보드에 복사' : '짧은 링크를 클립보드에 복사'}</small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="share-menu-item"
-                    onClick={handleQR}
-                    disabled={!!loading || isUrlLimitReached}
-                    title={isUrlLimitReached ? '용량 초과로 비활성화됨' : 'QR 코드 생성'}
-                  >
-                    <IconQR size={17} />
-                    <span className="share-menu-item-copy">
-                      <strong>QR 코드</strong>
-                      <small>{isUrlLimitReached ? '링크 용량을 줄인 뒤 사용 가능' : '휴대폰으로 스캔할 QR 생성'}</small>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="share-menu-item"
-                    onClick={handleShare}
-                    disabled={!!loading}
-                  >
-                    <IconShare size={17} />
-                    <span className="share-menu-item-copy">
-                      <strong>공유하기</strong>
-                      <small>기기 공유 메뉴 열기</small>
-                    </span>
-                  </button>
+                  <div className={shareActionsReady ? 'share-menu-items' : 'share-menu-items share-menu-items--blurred'}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="share-menu-item"
+                      onClick={handleCopyLink}
+                      disabled={!shareActionsReady || !!loading}
+                    >
+                      <IconLink size={17} />
+                      <span className="share-menu-item-copy">
+                        <strong>링크 복사</strong>
+                        <small>{isUrlLimitReached ? '전체 링크를 클립보드에 복사' : '짧은 링크를 클립보드에 복사'}</small>
+                      </span>
+                      {copyFeedback && <span className="share-menu-item-status" role="status" aria-live="polite">{copyFeedback}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="share-menu-item"
+                      onClick={handleQR}
+                      disabled={!shareActionsReady || !!loading || isUrlLimitReached}
+                      title={isUrlLimitReached ? '용량 초과로 비활성화됨' : 'QR 코드 생성'}
+                    >
+                      <IconQR size={17} />
+                      <span className="share-menu-item-copy">
+                        <strong>QR 코드</strong>
+                        <small>{isUrlLimitReached ? '링크 용량을 줄인 뒤 사용 가능' : '휴대폰으로 스캔할 QR 생성'}</small>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="share-menu-item"
+                      onClick={handleShare}
+                      disabled={!shareActionsReady || !!loading}
+                    >
+                      <IconShare size={17} />
+                      <span className="share-menu-item-copy">
+                        <strong>공유하기</strong>
+                        <small>기기 공유 메뉴 열기</small>
+                      </span>
+                    </button>
+                  </div>
+
+                  {!shareActionsReady && (
+                    <div className="share-menu-gate">
+                      <button
+                        ref={shareGateRef}
+                        type="button"
+                        className="share-menu-gate-btn"
+                        onClick={handlePrepareShare}
+                        disabled={loading === 'prepare-share'}
+                        aria-label="눌러서 단축링크 생성"
+                      >
+                        {loading === 'prepare-share' ? <IconLoader size={18} /> : <IconLink size={18} />}
+                        <span>{loading === 'prepare-share' ? '단축링크 생성 중…' : '눌러서 단축링크 생성'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

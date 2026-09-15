@@ -163,7 +163,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: "create_travel_plan",
+        name: "create_link",
         description: "Generate a Travelink plan link that can be opened in the Travelink web app.",
         inputSchema: {
           type: "object",
@@ -247,7 +247,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  if (name === "create_travel_plan") {
+  if (name === "create_link") {
     const { title, items } = args;
     const planId = uuidv4();
     const state = {

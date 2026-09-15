@@ -1,7 +1,7 @@
 import { IconPlus } from '../Icons'
 import ItineraryItem from './ItineraryItem'
 
-export default function DateSection({ date, items, activeItemId, currentItemId, onUpdate, onDelete, onItemClick, onAddItem, isLocked }) {
+export default function DateSection({ date, items, activeItemId, currentItemId, aiFlashItemId, aiFlashTick = 0, onUpdate, onDelete, onItemClick, onAddItem, isLocked }) {
   const dateLabel = date
     ? new Date(date + 'T00:00:00').toLocaleDateString('ko-KR', {
         year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
@@ -21,6 +21,8 @@ export default function DateSection({ date, items, activeItemId, currentItemId, 
             item={item}
             isActive={activeItemId === item.id}
             isCurrent={currentItemId === item.id}
+            isAiActive={aiFlashItemId === item.id}
+            aiPulseTick={aiFlashTick}
             onUpdate={onUpdate}
             onDelete={onDelete}
             onClick={onItemClick}

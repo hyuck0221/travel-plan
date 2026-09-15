@@ -214,6 +214,13 @@ export const IconLoader = (p) => (
   </Icon>
 )
 
+export const IconSparkle = (p) => (
+  <Icon {...p}>
+    <path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z" fill="currentColor" stroke="none" />
+    <path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" fill="currentColor" stroke="none" />
+  </Icon>
+)
+
 export const IconLock = (p) => (
   <Icon {...p}>
     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>

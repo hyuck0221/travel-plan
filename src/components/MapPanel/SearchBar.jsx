@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { IconSearch, IconLoader } from '../Icons'
 
-export default function SearchBar({ onSelectPlace }) {
+export default function SearchBar({ onSelectPlace, aiQuery = '', aiSearching = false }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
@@ -21,6 +21,19 @@ export default function SearchBar({ onSelectPlace }) {
   useEffect(() => {
     setSelectedIndex(-1)
   }, [results])
+
+  useEffect(() => {
+    if (aiQuery) setQuery(aiQuery)
+  }, [aiQuery])
+
+  useEffect(() => {
+    if (aiSearching) {
+      setLoading(true)
+      setOpen(false)
+    } else if (aiQuery) {
+      setLoading(false)
+    }
+  }, [aiQuery, aiSearching])
 
   const search = async (q) => {
     if (!q.trim()) { setResults([]); setOpen(false); return }
@@ -98,7 +111,7 @@ export default function SearchBar({ onSelectPlace }) {
 
   return (
     <div className="search-bar-wrapper" ref={wrapperRef}>
-      <div className="search-bar">
+      <div className={'search-bar' + (aiSearching ? ' search-bar--ai' : '')}>
         {loading ? <IconLoader size={16} className="search-icon icon-spin" /> : <IconSearch size={16} className="search-icon" />}
         <input
           type="text"

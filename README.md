@@ -10,7 +10,7 @@
 
 <p align="center">
   링크로 저장되는 일정관리 서비스 입니다.<br>
-  위 링크 접속 시 바로 사용할 수 있고, MCP 연결을 통해 AI Agent로도 생성할 수 있습니다. (<a href="MCP_GUIDE.md"><strong>MCP 가이드</strong></a>)
+  위 링크 접속 시 브라우저의 로컬 AI로 일정을 만들고 수정할 수 있으며, MCP 연결을 통해 외부 AI Agent에서도 사용할 수 있습니다. (<a href="MCP_GUIDE.md"><strong>MCP 가이드</strong></a>)
 </p>
 
 ---

@@ -150,6 +150,13 @@ function getMarkerGroupSignature(group) {
 
 const MAP_BOUNDS_PADDING = { top: 80, right: 30, bottom: 30, left: 30 }
 
+function hasNaverMapApi() {
+  return typeof window !== 'undefined'
+    && typeof window.naver?.maps?.Map === 'function'
+    && typeof window.naver?.maps?.LatLng === 'function'
+    && typeof window.naver?.maps?.LatLngBounds === 'function'
+}
+
 function getCoordinateItems(items) {
   return items.filter(item => (
     item.lat != null && item.lng != null
@@ -166,6 +173,7 @@ function getCoordinateSignature(items) {
 }
 
 function centerMapOnItems(map, items, { animate = false } = {}) {
+  if (!hasNaverMapApi()) return false
   const coordinateItems = getCoordinateItems(items)
   if (coordinateItems.length === 0) return false
 
@@ -206,7 +214,7 @@ function centerMapOnItems(map, items, { animate = false } = {}) {
   return true
 }
 
-export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace, tracking, onToggleTracking, isLocked }) {
+export default function MapPanel({ items, activeItemId, onMarkerClick, onRegisterPlace, tracking, onToggleTracking, isLocked, aiSearchQuery, aiSearching }) {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markerEntriesRef = useRef(new Map())
@@ -293,7 +301,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       if (resizeFrameRef.current !== null) return
       resizeFrameRef.current = requestAnimationFrame(() => {
         resizeFrameRef.current = null
-        if (mapInstanceRef.current) {
+        if (mapInstanceRef.current && typeof window.naver?.maps?.Event?.trigger === 'function') {
           window.naver.maps.Event.trigger(mapInstanceRef.current, 'resize')
         }
       })
@@ -317,6 +325,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       // GL 없이 코어 API만 준비된 환경에서는 jsContentLoaded를 사용한다.
       const glReady = window.naver.maps.glEnabled === true
       if (!glReady && window.naver.maps.jsContentLoaded !== true) return false
+      if (!hasNaverMapApi()) return false
       initializedRef.current = true
 
       const map = new window.naver.maps.Map(mapRef.current, {
@@ -396,7 +405,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     delete window.__registerPreviewPlace
     delete window.__closePreviewPlace
 
-    if (!previewPlace || !mapInstanceRef.current) return
+    if (!previewPlace || !mapInstanceRef.current || !hasNaverMapApi()) return
 
     const marker = new window.naver.maps.Marker({
       position: new window.naver.maps.LatLng(previewPlace.lat, previewPlace.lng),
@@ -433,7 +442,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   // 지도 확대·축소와 일정 선택이 동시에 일어날 때의 끊김을 줄인다.
   useEffect(() => {
     const map = mapInstanceRef.current
-    if (!mapReady || !map) return
+    if (!mapReady || !map || !hasNaverMapApi()) return
 
     // Group items by coordinate to detect overlapping pins
     const groups = new Map()
@@ -505,7 +514,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   // 경로선도 하나만 유지하고 경로 데이터만 갱신한다.
   useEffect(() => {
     const map = mapInstanceRef.current
-    if (!mapReady || !map) return
+    if (!mapReady || !map || !hasNaverMapApi()) return
     const sorted = getSortedMarkerItems(items)
     if (sorted.length < 2) {
       if (polylineRef.current) {
@@ -541,7 +550,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
 
   // Pan to active item
   useEffect(() => {
-    if (!mapReady || !mapInstanceRef.current || !activeItemId) return
+    if (!mapReady || !mapInstanceRef.current || !activeItemId || !hasNaverMapApi()) return
     // 좌표 구성이 바뀐 순간에는 아래 전체 핀 재센터링이 최종 화면을 담당한다.
     if (centeredCoordinateSignatureRef.current !== coordinateSignature) return
     const item = itemsRef.current.find(i => i.id === activeItemId)
@@ -556,7 +565,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   // 일정의 좌표 구성이 바뀌면 새로고침과 같은 기준으로 전체 핀을 화면에 맞춘다.
   useEffect(() => {
     const map = mapInstanceRef.current
-    if (!mapReady || !map) return
+    if (!mapReady || !map || !hasNaverMapApi()) return
     if (centeredCoordinateSignatureRef.current === coordinateSignature) return
 
     centeredCoordinateSignatureRef.current = coordinateSignature
@@ -571,7 +580,8 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       return
     }
 
-    if (!navigator.geolocation) { onToggleTracking(false); return }
+    if (!mapReady) return
+    if (!hasNaverMapApi() || !navigator.geolocation) { onToggleTracking(false); return }
 
     const dot = `<div style="width:14px;height:14px;position:relative;">
       <div style="position:absolute;inset:0;background:#ef4444;border-radius:50%;
@@ -580,7 +590,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       ({ coords: { latitude: lat, longitude: lng } }) => {
-        if (!mapInstanceRef.current) return
+        if (!mapInstanceRef.current || !hasNaverMapApi()) return
         const pos = new window.naver.maps.LatLng(lat, lng)
         if (locationMarkerRef.current) {
           locationMarkerRef.current.setPosition(pos)
@@ -604,7 +614,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   }, [tracking, mapReady])
 
   const handleSelectPlace = ({ lat, lng, destination, address }) => {
-    if (mapInstanceRef.current) {
+    if (mapInstanceRef.current && hasNaverMapApi()) {
       const coord = new window.naver.maps.LatLng(lat, lng)
       if (typeof mapInstanceRef.current.morph === 'function') {
         mapInstanceRef.current.morph(coord, 15, { duration: 480, easing: 'easeOutCubic' })
@@ -620,7 +630,7 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
 
   return (
     <div className="map-panel">
-      <SearchBar onSelectPlace={handleSelectPlace} />
+      <SearchBar onSelectPlace={handleSelectPlace} aiQuery={aiSearchQuery} aiSearching={aiSearching} />
       <div id="naver-map" ref={mapRef} />
       <div className="map-controls map-controls--desktop">
         <button

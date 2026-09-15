@@ -85,7 +85,7 @@ const FEATURES = [
   { Icon: IcQR,             title: 'QR코드 생성',      desc: '여행 일정을 QR코드로 저장해 오프라인에서도 쉽게 공유하고 접근하세요.' },
   { Icon: IcLayers,         title: '여러 여행 관리',   desc: '제주도, 부산, 강원도… 여러 국내 여행 계획을 한 앱에서 스위칭하며 관리하세요.' },
   { Icon: IcLocation,       title: '실시간 현위치',    desc: '여행 중에는 현재 위치가 지도에 표시되고, 지금 진행 중인 일정이 자동으로 하이라이트됩니다.' },
-  { Icon: IcSparkle,        title: 'AI 에이전트 연동', desc: 'MCP 프로토콜을 통해 Claude 등 AI 에이전트가 직접 여행 일정을 생성해줍니다.' },
+  { Icon: IcSparkle,        title: 'AI로 일정 편집', desc: '브라우저 안의 로컬 AI로 새 일정을 만들고, 보고 있는 일정의 장소·시간·메모를 바로 수정하세요.' },
 ]
 
 const STEPS = [

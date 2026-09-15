@@ -155,7 +155,7 @@ export default async function handler(req, res) {
               },
             },
             {
-              name: "create_travel_plan",
+              name: "create_link",
               description: "Generate a shortened link for the Travelink app that contains all the items and title.",
               inputSchema: {
                 type: "object",
@@ -215,7 +215,7 @@ export default async function handler(req, res) {
         }));
         toolResult = { content: [{ type: "text", text: JSON.stringify(items, null, 2) }] };
       } 
-      else if (name === "create_travel_plan") {
+      else if (name === "create_link") {
         const { title, items } = args;
         const state = {
           id: uuidv4(), title,
