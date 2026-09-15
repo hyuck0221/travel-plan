@@ -53,19 +53,6 @@ export default function ItineraryItem({ item, isActive, isCurrent, isAiActive, a
   }, [isActive])
 
   useEffect(() => {
-    if (!isActive || editing || isLocked) return
-    const handler = (e) => {
-      if (e.key === 'Enter' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-        e.preventDefault()
-        setEditing(true)
-        onEditingChange?.(true)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [isActive, editing, onEditingChange, isLocked])
-
-  useEffect(() => {
     if (!editing) {
       setForm({
         date: item.date, time: item.time,

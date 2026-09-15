@@ -15,20 +15,9 @@ import { getMigratedDomainUrl, getMigrationContext, hasPlanData } from './utils/
 const MIN_PANEL_WIDTH = 240
 const MAX_PANEL_RATIO = 0.75
 const MOBILE_BREAKPOINT = 640
-const AI_CHAT_STORAGE_KEY = 'travel-ai-chat-history-v1'
 const AI_CHAT_MAX_MESSAGES = 40
-const AI_ACTIVITY_STORAGE_KEY = 'travel-ai-activity-history-v1'
 const AI_ACTIVITY_MAX_ITEMS = 40
 const AI_REQUEST_MAX_GROUPS = 20
-
-function loadAiChatByPlan() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(AI_CHAT_STORAGE_KEY) || '{}')
-    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
-  } catch {
-    return {}
-  }
-}
 
 function makeAiMessage(role, content, tone = '', id) {
   return {
@@ -36,24 +25,6 @@ function makeAiMessage(role, content, tone = '', id) {
     role,
     content: String(content || '').trim(),
     ...(tone ? { tone } : {}),
-  }
-}
-
-function loadAiActivityByPlan() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(AI_ACTIVITY_STORAGE_KEY) || '{}')
-    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {}
-    return Object.fromEntries(Object.entries(saved).map(([planId, groups]) => [
-      planId,
-      Array.isArray(groups) ? groups.filter(group => group && typeof group === 'object').map(group => ({
-        ...group,
-        activities: Array.isArray(group.activities) ? group.activities.slice(-AI_ACTIVITY_MAX_ITEMS) : [],
-        expanded: false,
-        status: group.status || 'done',
-      })).slice(-AI_REQUEST_MAX_GROUPS) : [],
-    ]))
-  } catch {
-    return {}
   }
 }
 
@@ -84,11 +55,12 @@ export default function App() {
 
   const [activeItemId, setActiveItemId] = useState(null)
   const [aiOpen, setAiOpen] = useState(false)
-  const [aiActivityByPlan, setAiActivityByPlan] = useState(loadAiActivityByPlan)
+  // AI 대화와 처리 과정은 일정 데이터와 분리된 세션 메모리 상태로만 유지한다.
+  const [aiActivityByPlan, setAiActivityByPlan] = useState(() => ({}))
   const [aiActiveItemId, setAiActiveItemId] = useState(null)
   const [aiFlash, setAiFlash] = useState({ itemId: null, tick: 0 })
   const [aiSearch, setAiSearch] = useState({ query: '', searching: false })
-  const [aiChatByPlan, setAiChatByPlan] = useState(loadAiChatByPlan)
+  const [aiChatByPlan, setAiChatByPlan] = useState(() => ({}))
   const aiMessages = Array.isArray(aiChatByPlan[activeId]) ? aiChatByPlan[activeId] : []
   const [panelWidth, setPanelWidth] = useState(() => {
     const saved = localStorage.getItem('panel-width')
@@ -103,18 +75,6 @@ export default function App() {
   const containerRef = useRef(null)
   const activeAiRequestRef = useRef(null)
   const aiActivityGroups = Array.isArray(aiActivityByPlan[activeId]) ? aiActivityByPlan[activeId] : []
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(AI_CHAT_STORAGE_KEY, JSON.stringify(aiChatByPlan))
-    } catch {}
-  }, [aiChatByPlan])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(AI_ACTIVITY_STORAGE_KEY, JSON.stringify(aiActivityByPlan))
-    } catch {}
-  }, [aiActivityByPlan])
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
@@ -170,16 +130,19 @@ export default function App() {
   const handleAiEvent = useCallback((event) => {
     const activeRequest = activeAiRequestRef.current
     const activityType = event.type === 'stage' ? (event.key || 'stage') : event.type
-    if (activeRequest && event.label) updateAiActivityGroup(activeRequest.planId, activeRequest.requestId, group => ({
+    if (activeRequest && (event.label || event.responseMode)) updateAiActivityGroup(activeRequest.planId, activeRequest.requestId, group => ({
       ...group,
-      activities: [
-        ...group.activities,
-        {
-          id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-          type: activityType,
-          label: event.label,
-        },
-      ],
+      ...(event.responseMode ? { responseMode: event.responseMode } : {}),
+      ...(event.label ? {
+        activities: [
+          ...group.activities,
+          {
+            id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+            type: activityType,
+            label: event.label,
+          },
+        ],
+      } : {}),
     }))
     if (event.itemId) {
       setAiActiveItemId(event.itemId)
@@ -260,23 +223,22 @@ export default function App() {
     setAiFlash(prev => ({ ...prev, itemId: null }))
     setAiSearch({ query: '', searching: false })
     appendAiMessage(userMessage, planId)
-    if (isLocked) {
-      handleAiEvent({ type: 'error', label: '잠금 상태에서는 AI가 일정을 바꿀 수 없습니다. 먼저 잠금을 해제해주세요.' })
-      return
-    }
     localAgent.run({
       prompt,
       currentPlan: { title, items },
       conversationHistory: aiMessages,
+      isLocked,
     }).then(result => {
       if (!result) return
       const message = result.action?.message
         || (result.plan ? `${result.plan.items.length}개 일정을 반영했습니다.` : '요청을 확인했습니다.')
       const assistantMessage = makeAiMessage('assistant', message)
+      const responseMode = result.action?.mode === 'apply' ? 'apply' : 'answer'
       appendAiMessage(assistantMessage, planId)
       updateAiActivityGroup(planId, requestId, {
         assistantMessageId: assistantMessage.id,
         status: 'done',
+        responseMode,
         expanded: false,
       })
       if (activeAiRequestRef.current?.requestId === requestId) activeAiRequestRef.current = null

@@ -82,6 +82,7 @@ function statusCopy(status, progress) {
   }
   if (status === 'working') return 'AI가 요청을 처리하는 중'
   if (status === 'applying') return '일정을 화면에 적용하는 중'
+  if (status === 'answered') return '답변을 보냈습니다'
   if (status === 'done') return '일정에 반영했습니다'
   if (status === 'cancelled') return '작업을 중단했습니다'
   if (status === 'error') return '작업을 완료하지 못했습니다'
@@ -90,7 +91,7 @@ function statusCopy(status, progress) {
 
 function ActivityThread({ group, onToggle }) {
   const activities = Array.isArray(group?.activities) ? group.activities : []
-  if (activities.length === 0) return null
+  if (activities.length === 0 || group?.responseMode === 'answer') return null
 
   const expanded = group.expanded !== false
   if (!expanded) {
@@ -155,7 +156,40 @@ export default function AIAssistant({
   const inputRef = useRef(null)
   const contentEndRef = useRef(null)
   const interactionRef = useRef(null)
+  const submitRef = useRef(null)
   const isRunning = ['loading', 'working', 'applying'].includes(status)
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    const prompt = draft.trim()
+    if (!prompt || isRunning) return
+    setDraft('')
+    onSubmit(prompt)
+  }
+
+  // React의 이벤트 위임보다 먼저 입력창에서 Enter를 가로채 일정 카드의
+  // window 단축키로 전파되지 않도록 한다. submit 함수는 최신 draft를
+  // 사용해야 하므로 ref를 통해 현재 렌더의 함수를 참조한다.
+  submitRef.current = handleSubmit
+
+  useEffect(() => {
+    if (!open || !inputRef.current) return undefined
+    const input = inputRef.current
+    const handleNativeKeyDown = (event) => {
+      if (event.key !== 'Enter') return
+
+      // Shift+Enter는 줄바꿈만 허용하되 일정 카드로는 전파하지 않는다.
+      event.stopPropagation()
+      if (event.shiftKey) return
+
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      submitRef.current?.(event)
+    }
+
+    input.addEventListener('keydown', handleNativeKeyDown, true)
+    return () => input.removeEventListener('keydown', handleNativeKeyDown, true)
+  }, [open])
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())
@@ -264,14 +298,6 @@ export default function AIAssistant({
 
   if (!open) return null
 
-  const handleSubmit = (event) => {
-    event.preventDefault()
-    const prompt = draft.trim()
-    if (!prompt || isRunning) return
-    setDraft('')
-    onSubmit(prompt)
-  }
-
   const handleSuggestion = (prompt) => {
     if (isRunning) return
     setDraft(prompt)
@@ -363,8 +389,8 @@ export default function AIAssistant({
         {status === 'idle' && activityGroups.length === 0 && messages.length === 0 && (
           <div className="ai-assistant-intro">
             <div className="ai-intro-icon"><IconSparkle size={20} /></div>
-            <strong>무엇을 바꿔볼까요?</strong>
-            <p>장소를 찾아보고, 지금 보고 있는 일정에 장소·시간·메모를 바로 추가·수정·삭제해보세요.</p>
+            <strong>무엇을 도와드릴까요?</strong>
+            <p>일정을 바로 수정하거나, 지금 구성된 일정에 대해 궁금한 점을 물어보세요.</p>
           </div>
         )}
 
@@ -387,12 +413,13 @@ export default function AIAssistant({
         )}
       </div>
 
-      <form className="ai-assistant-composer" onSubmit={handleSubmit}>
-        <label className="sr-only" htmlFor="ai-itinerary-prompt">AI에게 시킬 일정 작업</label>
+      <form className="ai-assistant-composer" data-ai-composer="true" onSubmit={handleSubmit}>
+        <label className="sr-only" htmlFor="ai-itinerary-prompt">AI에게 보낼 메시지</label>
         <div className="ai-composer-row">
           <textarea
             ref={inputRef}
             id="ai-itinerary-prompt"
+            data-ai-input="true"
             value={draft}
             onChange={event => setDraft(event.target.value)}
             onKeyDown={event => {

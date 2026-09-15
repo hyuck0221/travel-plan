@@ -69,7 +69,7 @@ export const PrivacyPolicy = ({isOpen, onClose}) => (
         </div>
         <div className="legal-section">
             <h3>3. 브라우저 내 로컬 AI 처리</h3>
-            <p>Travelink AI 기능은 WebGPU를 이용해 Qwen 0.5B 로컬 모델을 사용자의 브라우저에서 실행합니다. 사용자가 입력한 AI 프롬프트, 현재 일정, AI 대화 이력은 일정 작업을 해석하고 반영하기 위해 브라우저 내에서 처리되며, 생성형 AI 모델의 입력·출력 내용이 Travelink 서버나 별도의 외부 생성형 AI 서비스로 전송되거나 저장되지 않습니다.
+            <p>Travelink AI 기능은 WebGPU를 이용해 Qwen 2.5 3B 로컬 모델을 사용자의 브라우저에서 실행합니다. 사용자가 입력한 AI 프롬프트, 현재 일정, AI 대화 이력은 일정 작업을 해석하고 반영하기 위해 브라우저 내에서 처리되며, 생성형 AI 모델의 입력·출력 내용이 Travelink 서버나 별도의 외부 생성형 AI 서비스로 전송되거나 저장되지 않습니다.
                 <br></br>
                 로컬 모델 파일은 AI 실행을 위해 브라우저 저장소에 캐시될 수 있으며, 이는 사용자의 프롬프트나 일정 데이터와 별개입니다.
                 <br></br>

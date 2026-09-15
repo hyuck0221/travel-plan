@@ -1,9 +1,11 @@
 import { searchPlaces } from './mcpClient.js'
 
-export const LOCAL_MODEL_ID = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC'
-export const LOCAL_MODEL_LABEL = 'Qwen 0.5B'
+export const LOCAL_MODEL_ID = 'Qwen2.5-3B-Instruct-q4f16_1-MLC'
+export const LOCAL_MODEL_LABEL = 'Qwen 2.5 3B'
 
 let enginePromise = null
+let engineInstance = null
+let engineLoadToken = null
 let worker = null
 let progressListener = null
 let engineReady = false
@@ -42,20 +44,21 @@ const ACTION_SCHEMA = {
 
 const SYSTEM_PROMPT = [
   '너는 Travelink 브라우저 일정 편집 도우미다.',
-  '사용자의 요청을 현재 여행 일정에 적용할 수 있는 JSON 하나로만 답한다. 마크다운, 설명, 코드블록은 쓰지 않는다.',
+  '사용자의 요청을 현재 여행 일정에 적용하거나 질문에 답하는 JSON 하나로만 답한다. 마크다운, 설명, 코드블록은 쓰지 않는다.',
   '',
   '규칙:',
-  '1. mode는 apply, search, answer 중 하나다. 일정 생성·수정·삭제 요청은 apply다.',
-  '2. apply일 때 items는 최종 일정 전체 목록이다. 기존 일정의 id는 그대로 보존하고, 새 일정은 id를 비워 둔다. 사용자가 삭제를 요청한 항목은 최종 목록에서 제외한다.',
-  '3. 장소명, 날짜(YYYY-MM-DD), 시간(HH:mm), 메모, 카테고리(hotel/restaurant/cafe/attraction/shopping/transport/activity/nature), 비용 문자열을 가능한 한 채운다. 모르는 값은 빈 문자열이다.',
-  '4. 장소가 여러 개면 사용자의 순서와 시간 흐름을 유지한다. 현재 일정의 의도하지 않은 항목을 임의로 지우지 않는다.',
-  '5. 좌표는 알고 있을 때만 숫자로 넣고, 모르면 생략한다. 브라우저가 장소 검색 결과로 보강한다.',
-  '6. 제목을 바꾸라는 요청이 없으면 기존 title을 유지한다.',
-  '7. 새 장소의 좌표와 주소는 브라우저가 지도 검색으로 보강하므로, 일정 변경 요청은 mode=apply와 최종 items를 바로 보낸다. 사용자가 검색만 요청했을 때만 mode=search를 사용한다.',
-  '8. 일반적인 질문이나 일정 변경이 아닌 요청은 mode=answer, items는 현재 일정 전체를 그대로 둔다.',
+  '1. mode는 apply, search, answer 중 하나다.',
+  '2. 사용자가 추가·삭제·수정·변경·이동·시간 조정·일정 생성처럼 일정 변경을 명확히 요청했을 때만 mode=apply를 사용한다.',
+  '3. 일정 조회, 요약, 설명, 추천, 비교, 여행지 정보, 일반 대화처럼 일정 변경이 아닌 요청은 mode=answer를 사용한다. 이때 message에 질문에 대한 실제 답변을 쓰고 items는 빈 배열로 둔다. 일정에 아무것도 적용하지 않는다.',
+  '4. 장소 검색만 요청했을 때는 mode=search와 query를 사용한다. 검색 뒤에는 검색 결과를 참고해 mode=answer로 실제 답변을 작성한다.',
+  '5. apply일 때 items는 최종 일정 전체 목록이다. 기존 일정의 id는 그대로 보존하고, 새 일정은 id를 비워 둔다. 사용자가 삭제를 요청한 항목은 최종 목록에서 제외한다.',
+  '6. 장소명, 날짜(YYYY-MM-DD), 시간(HH:mm), 메모, 카테고리(hotel/restaurant/cafe/attraction/shopping/transport/activity/nature), 비용 문자열을 가능한 한 채운다. 모르는 값은 빈 문자열이다.',
+  '7. 장소가 여러 개면 사용자의 순서와 시간 흐름을 유지한다. 현재 일정의 의도하지 않은 항목을 임의로 지우지 않는다.',
+  '8. 좌표는 알고 있을 때만 숫자로 넣고, 모르면 생략한다. 브라우저가 장소 검색 결과로 보강한다.',
+  '9. 제목을 바꾸라는 요청이 없으면 기존 title을 유지한다.',
   '',
   '출력 JSON 형식:',
-  '{"mode":"apply|search|answer","title":"제목","message":"짧은 한국어 완료 메시지","query":"검색어 또는 빈 문자열","items":[{"id":"기존 id 또는 빈 문자열","destination":"장소","address":"","lat":0,"lng":0,"memo":"","date":"YYYY-MM-DD","time":"HH:mm","category":"","cost":""}]}',
+  '{"mode":"apply|search|answer","title":"제목","message":"질문에 대한 답변 또는 완료 메시지","query":"검색어 또는 빈 문자열","items":[{"id":"기존 id 또는 빈 문자열","destination":"장소","address":"","lat":0,"lng":0,"memo":"","date":"YYYY-MM-DD","time":"HH:mm","category":"","cost":""}]}',
 ].join('\n')
 
 function emitProgress(report) {
@@ -63,6 +66,14 @@ function emitProgress(report) {
     progress: Number.isFinite(report?.progress) ? report.progress : 0,
     text: report?.text || '',
   })
+}
+
+function createAbortError() {
+  return new DOMException('Aborted', 'AbortError')
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw createAbortError()
 }
 
 export function isLocalEngineReady() {
@@ -77,25 +88,62 @@ export async function getLocalEngine(onProgress) {
   progressListener = onProgress
   if (enginePromise) return enginePromise
 
-  enginePromise = (async () => {
+  const loadToken = { cancelled: false, reject: null, promise: null }
+  engineLoadToken = loadToken
+  const loadPromise = (async () => {
     const { CreateWebWorkerMLCEngine } = await import('@mlc-ai/web-llm')
+    if (loadToken.cancelled) throw createAbortError()
     worker = worker || new Worker(new URL('./llm.worker.js', import.meta.url), { type: 'module' })
     return CreateWebWorkerMLCEngine(worker, LOCAL_MODEL_ID, {
       initProgressCallback: emitProgress,
     })
   })()
+  const cancellationPromise = new Promise((_, reject) => { loadToken.reject = reject })
+  const pendingPromise = Promise.race([loadPromise, cancellationPromise])
+  loadToken.promise = pendingPromise
+  enginePromise = pendingPromise
 
   try {
-    const engine = await enginePromise
+    const engine = await pendingPromise
+    if (loadToken.cancelled) throw createAbortError()
+    engineInstance = engine
     engineReady = true
     return engine
   } catch (error) {
-    engineReady = false
-    enginePromise = null
-    worker?.terminate()
-    worker = null
+    if (enginePromise === pendingPromise) {
+      engineReady = false
+      engineInstance = null
+      enginePromise = null
+      engineLoadToken = null
+      worker?.terminate()
+      worker = null
+    }
     throw error
   }
+}
+
+/** 모델 로딩 중인 Web Worker와 대기 Promise를 즉시 취소한다. */
+export function cancelLocalEngineLoad() {
+  if (engineReady || !enginePromise || !engineLoadToken) return
+
+  const loadToken = engineLoadToken
+  loadToken.cancelled = true
+  loadToken.reject?.(createAbortError())
+  worker?.terminate()
+  worker = null
+  engineReady = false
+  engineInstance = null
+  enginePromise = null
+  engineLoadToken = null
+  progressListener = null
+}
+
+/** 현재 진행 중인 WebLLM 토큰 생성을 즉시 중단한다. */
+export function interruptLocalEngineGeneration() {
+  try {
+    const interruption = engineInstance?.interruptGenerate?.()
+    interruption?.catch?.(() => {})
+  } catch {}
 }
 
 function compactPlan(plan) {
@@ -201,12 +249,19 @@ export function parseAgentAction(rawText) {
       : parsed?.action && typeof parsed.action === 'object'
         ? { ...parsed, ...parsed.action }
         : parsed
-    const mode = typeof action?.mode === 'string' ? action.mode : action?.items ? 'apply' : ''
+    const message = typeof action?.message === 'string'
+      ? action.message
+      : typeof action?.answer === 'string'
+        ? action.answer
+        : typeof action?.response === 'string'
+          ? action.response
+          : ''
+    const mode = typeof action?.mode === 'string' ? action.mode : action?.items ? 'apply' : message ? 'answer' : ''
     if (!['apply', 'search', 'answer'].includes(mode)) continue
     return {
       mode,
       title: typeof action.title === 'string' ? action.title : '',
-      message: typeof action.message === 'string' ? action.message : '',
+      message,
       query: typeof action.query === 'string' ? action.query : '',
       items: Array.isArray(action.items) ? action.items : [],
     }
@@ -225,6 +280,29 @@ function modelText(response) {
 
 function safeString(value, maxLength = 500) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
+}
+
+export function isScheduleMutationRequest(prompt) {
+  const text = safeString(prompt, 1200)
+  if (!text) return false
+
+  const fullTripRequest = /(?:\d+\s*박\s*\d+\s*일|\d+\s*일).*?(?:일정|여행|코스).*?(?:추천|짜|만들|구성|계획)/u.test(text)
+  if (fullTripRequest) return true
+
+  const questionLike = /[?？]|(?:어때|어떤가|일까|인가|해도\s*(?:돼|될까)|하면\s*(?:어때|좋|될까)|가능(?:할까|해)|괜찮|추천|알려|설명|요약|보여|비교|언제|어디|몇|뭐|무엇|왜|어떻게)/u.test(text)
+  if (questionLike) return false
+
+  return /(?:추가|더해|넣어|등록|생성|삭제해|지워|빼줘|제거해|수정해|바꿔|변경해|교체|이동해|옮겨|정리해|재구성해|만들어|짜줘|구성해|계획해|채워|보강해|설정해|지정해|조정해|맞춰|다듬어|개선해|늘려|줄여|앞당겨|늦춰|예약해)/u.test(text)
+}
+
+function extractPlainChatAnswer(rawText) {
+  const fence = String.fromCharCode(96)
+  const cleaned = stripThinking(rawText)
+    .replace(new RegExp('^' + fence + fence + fence + '(?:json)?\\s*', 'i'), '')
+    .replace(new RegExp('\\s*' + fence + fence + fence + '$'), '')
+    .trim()
+  if (!cleaned || cleaned.startsWith('{') || cleaned.startsWith('[')) return ''
+  return safeString(cleaned, 2000)
 }
 
 function isCoordinate(value) {
@@ -525,8 +603,10 @@ async function buildDeterministicTripItems(request, signal, onEvent, searchResul
     if (!results) {
       try {
         results = await searchPlaces(query, signal)
+        throwIfAborted(signal)
       } catch (error) {
         if (error?.name === 'AbortError') throw error
+        throwIfAborted(signal)
         results = []
         onEvent?.({ type: 'warning', label: query + ' 검색에 실패해 장소명만 반영합니다.' })
       }
@@ -859,8 +939,10 @@ async function enrichItems(items, currentItems, signal, onEvent, knownResults = 
     if (!results) {
       try {
         results = await searchPlaces(query, signal)
+        throwIfAborted(signal)
       } catch (error) {
         if (error?.name === 'AbortError') throw error
+        throwIfAborted(signal)
         results = []
         onEvent?.({ type: 'warning', label: query + ' 좌표를 확인하지 못해 장소명만 반영합니다.' })
       }
@@ -886,16 +968,27 @@ async function enrichItems(items, currentItems, signal, onEvent, knownResults = 
 
 function wait(ms, signal) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms)
-    if (!signal) return
-    signal.addEventListener('abort', () => {
+    if (signal?.aborted) {
+      reject(createAbortError())
+      return
+    }
+
+    let timer
+    const handleAbort = () => {
       clearTimeout(timer)
-      reject(new DOMException('Aborted', 'AbortError'))
-    }, { once: true })
+      reject(createAbortError())
+    }
+
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', handleAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', handleAbort, { once: true })
   })
 }
 
-async function createCompletion(engine, messages, { strictJson = true } = {}) {
+async function createCompletion(engine, messages, { strictJson = true, signal } = {}) {
+  throwIfAborted(signal)
   const request = {
     model: LOCAL_MODEL_ID,
     messages,
@@ -905,52 +998,85 @@ async function createCompletion(engine, messages, { strictJson = true } = {}) {
     stream: false,
   }
 
-  if (!strictJson) return engine.chat.completions.create({ ...request, messages })
+  if (!strictJson) {
+    const response = await engine.chat.completions.create({ ...request, messages })
+    throwIfAborted(signal)
+    return response
+  }
 
   // WebLLM의 기본 JSON grammar는 모델별 schema compiler 차이의 영향을 받지
   // 않아 작은 모델에서도 가장 안정적으로 JSON 응답을 강제한다.
   try {
-    return await engine.chat.completions.create({
+    const response = await engine.chat.completions.create({
       ...request,
       messages,
       response_format: { type: 'json_object' },
     })
+    throwIfAborted(signal)
+    return response
   } catch (jsonModeError) {
+    if (signal?.aborted) throw createAbortError()
     // 구버전 WebLLM/브라우저에서 JSON mode가 실패하면 schema를 한 번 시도하고,
     // 마지막에는 일반 생성으로 내려가 runLocalAgent의 재파싱 루프가 처리한다.
     try {
-      return await engine.chat.completions.create({
+      const response = await engine.chat.completions.create({
         ...request,
         messages,
         response_format: { type: 'json_object', schema: JSON.stringify(ACTION_SCHEMA) },
       })
-    } catch {
+      throwIfAborted(signal)
+      return response
+    } catch (schemaError) {
+      if (signal?.aborted) throw createAbortError()
       try {
-        return await engine.chat.completions.create({ ...request, messages })
-      } catch {
+        const response = await engine.chat.completions.create({ ...request, messages })
+        throwIfAborted(signal)
+        return response
+      } catch (fallbackError) {
+        if (signal?.aborted) throw createAbortError()
         throw jsonModeError
       }
     }
   }
 }
 
-export async function runLocalAgent({ prompt, currentPlan, conversationHistory = [], signal, onEvent, onApplyPlan, onProgress }) {
+export async function runLocalAgent({ prompt, currentPlan, conversationHistory = [], signal, onEvent, onApplyPlan, onProgress, isLocked = false }) {
   const cleanPrompt = safeString(prompt, 1200)
   if (!cleanPrompt) throw new Error('AI에게 시킬 작업을 입력해주세요.')
+  throwIfAborted(signal)
 
-  onEvent?.({ type: 'stage', key: 'analyze', label: '요청을 일정 작업으로 해석 중' })
+  const mutationRequested = isScheduleMutationRequest(cleanPrompt)
+  onEvent?.({
+    type: 'stage',
+    key: 'analyze',
+    label: mutationRequested ? '일정 변경 요청을 해석 중' : '질문 내용을 확인 중',
+    responseMode: mutationRequested ? 'apply' : 'answer',
+  })
   const currentItems = currentPlan?.items || []
   const tripRequest = parseTripRequest(cleanPrompt)
   let action = null
   let lastRawText = ''
   const searchResults = new Map()
 
-  if (tripRequest) {
+  if (isLocked && mutationRequested) {
+    const lockedAction = {
+      mode: 'answer',
+      title: currentPlan?.title || '',
+      message: '현재 일정이 잠겨 있어 변경하지 않았습니다. 잠금을 해제한 후 다시 요청해주세요.',
+      query: '',
+      items: [],
+    }
+    onEvent?.({ type: 'done', label: lockedAction.message })
+    return { action: lockedAction, plan: null }
+  }
+
+  if (tripRequest && mutationRequested) {
     // 여행 기간이 명시된 전체 생성은 작은 모델에게 맡기지 않는다. 모델이
     // 한 장짜리 응답을 만들거나 긴 JSON 복구를 반복하는 동안 기다리지 않고,
     // 브라우저 플래너가 날짜·슬롯·지도 검색을 바로 오케스트레이션한다.
     onEvent?.({ type: 'stage', key: 'blueprint', label: '여행 기간과 하루별 일정 뼈대 구성 중' })
     const generated = await buildDeterministicTripItems(tripRequest, signal, onEvent, searchResults)
+    throwIfAborted(signal)
     const generatedQuality = validateTripPlan(generated.items, tripRequest)
     if (!generatedQuality.valid) {
       throw new Error('여행 일정의 날짜와 장소를 충분히 구성하지 못했습니다. 기간을 줄이거나 장소를 더 구체적으로 적어주세요.')
@@ -965,7 +1091,7 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
     onEvent?.({ type: 'stage', key: 'validate', label: '검색 결과와 날짜별 일정 품질 검사 중' })
   } else {
     const engine = await getLocalEngine(onProgress)
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    throwIfAborted(signal)
 
     const compactCurrentPlan = compactPlan(currentPlan)
     const messages = [
@@ -976,13 +1102,15 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
         content: JSON.stringify({
           today: new Date().toISOString().slice(0, 10),
           request: cleanPrompt,
+          requestType: mutationRequested ? 'schedule_mutation' : 'chat_answer',
           currentPlan: compactCurrentPlan,
         }),
       },
     ]
     const searchedQueries = new Set()
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      const response = await createCompletion(engine, messages)
+      const response = await createCompletion(engine, messages, { signal })
+      throwIfAborted(signal)
       const rawText = modelText(response)
       lastRawText = rawText
       try {
@@ -1000,6 +1128,20 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
         continue
       }
 
+      if (!mutationRequested && action.mode === 'apply') {
+        if (attempt === 3) break
+        onEvent?.({ type: 'stage', key: 'repair', label: '일정 변경 없이 질문 답변 형식으로 다시 정리 중' })
+        messages.push(
+          { role: 'assistant', content: rawText || '(빈 응답)' },
+          {
+            role: 'user',
+            content: '사용자는 일정 변경을 요청하지 않았다. 기존 일정은 절대 수정하지 말고, 질문에 대한 실제 답변을 작성해줘. mode=answer, items=[], message에는 자연스러운 한국어 답변을 넣어줘.',
+          },
+        )
+        action = null
+        continue
+      }
+
       if (action.mode !== 'search' || !action.query) break
 
       const normalizedQuery = normalizeDestination(action.query)
@@ -1014,19 +1156,26 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
         results = await searchPlaces(action.query, signal)
       } catch (error) {
         if (error?.name === 'AbortError') throw error
+        throwIfAborted(signal)
         onEvent?.({ type: 'warning', label: action.query + ' 검색을 완료하지 못했습니다.' })
         break
       }
+      throwIfAborted(signal)
       searchResults.set(normalizeDestination(action.query), results)
       messages.push(
         { role: 'assistant', content: rawText },
         {
           role: 'user',
-          content: '검색 결과를 참고해서 요청을 일정에 반영할지 판단하고, 반드시 위 JSON 형식의 apply 또는 answer로 답해줘. 검색 결과: ' + JSON.stringify(results.slice(0, 5)),
+          content: (mutationRequested
+            ? '검색 결과를 참고해서 요청을 일정에 반영할지 판단하고, 반드시 위 JSON 형식의 apply 또는 answer로 답해줘.'
+            : '사용자는 일정 변경을 요청하지 않았다. 검색 결과를 참고해 질문에 실제로 답하고, 기존 일정은 절대 수정하지 말아줘. mode=answer, items=[]로 답해줘.')
+            + ' 검색 결과: ' + JSON.stringify(results.slice(0, 5)),
         },
       )
     }
   }
+
+  throwIfAborted(signal)
 
   if (!action) {
     // 모델이 끝까지 자연어만 반환해도, 기존 카드의 명시적인 시간·날짜·메모
@@ -1044,7 +1193,7 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
       ),
       currentItems,
     )
-    if (recoveredItems !== currentItems) {
+    if (mutationRequested && recoveredItems !== currentItems) {
       action = {
         mode: 'apply',
         title: currentPlan?.title || '',
@@ -1053,10 +1202,33 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
         items: recoveredItems,
       }
       onEvent?.({ type: 'stage', key: 'repair', label: '명시한 카드 변경을 브라우저에서 복구 중' })
-    } else {
+    } else if (!mutationRequested) {
+      const answer = extractPlainChatAnswer(lastRawText)
+      if (answer) {
+        action = {
+          mode: 'answer',
+          title: currentPlan?.title || '',
+          message: answer,
+          query: '',
+          items: [],
+        }
+      }
+    }
+    if (!action) {
       throw new Error(lastRawText ? '로컬 AI 응답을 일정 JSON으로 변환하지 못했습니다. 요청을 조금 더 구체적으로 적어주세요.' : 'AI 작업 결과가 없습니다.')
     }
   }
+
+  if (!mutationRequested && action.mode === 'apply') {
+    action = {
+      mode: 'answer',
+      title: currentPlan?.title || '',
+      message: safeString(action.message, 2000) || extractPlainChatAnswer(lastRawText) || '현재 일정은 변경하지 않았습니다. 일정에 대해 궁금한 점을 조금 더 구체적으로 적어주세요.',
+      query: '',
+      items: [],
+    }
+  }
+
   if (action.mode !== 'apply') {
     // 작은 모델이 검색/답변으로 끝내더라도, 사용자가 카드에 명시한
     // 삭제·시간·날짜·메모 변경은 브라우저에서 놓치지 않고 적용한다.
@@ -1073,7 +1245,7 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
       ),
       currentItems,
     )
-    if (explicitlyChangedItems !== currentItems) {
+    if (mutationRequested && explicitlyChangedItems !== currentItems) {
       action = {
         mode: 'apply',
         title: currentPlan?.title || '',
@@ -1083,7 +1255,13 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
       }
       onEvent?.({ type: 'stage', key: 'repair', label: '명시한 카드 변경을 브라우저에서 복구 중' })
     } else {
-      onEvent?.({ type: 'done', label: action.message || '요청을 확인했습니다.' })
+      action = {
+        ...action,
+        title: currentPlan?.title || action.title || '',
+        message: safeString(action.message, 2000) || extractPlainChatAnswer(lastRawText) || '요청을 확인했습니다.',
+        items: [],
+      }
+      onEvent?.({ type: 'done', label: action.message })
       return { action, plan: null }
     }
   }
@@ -1099,6 +1277,7 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
 
   onEvent?.({ type: 'stage', key: 'search', label: '일정 장소의 위치 정보 보강 중' })
   const enrichedItems = await enrichItems(safeItems, currentItems, signal, onEvent, searchResults)
+  throwIfAborted(signal)
   const nextPlan = {
     title: safeString(action.title || currentPlan?.title, 80),
     items: enrichedItems,
@@ -1108,7 +1287,7 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
   onEvent?.({ type: 'stage', key: 'apply', label: operations.length + '개 일정 작업을 화면에 적용 중' })
   let workingItems = currentItems.slice()
   for (const [index, operation] of operations.entries()) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    throwIfAborted(signal)
     workingItems = applyPlanOperation(workingItems, operation)
     onApplyPlan?.(
       { title: nextPlan.title, items: workingItems },
@@ -1130,10 +1309,16 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
 
 export async function unloadLocalEngine() {
   if (!enginePromise) return
+  if (!engineReady) {
+    cancelLocalEngineLoad()
+    return
+  }
   try { await (await enginePromise).unload() } catch {}
   engineReady = false
+  engineInstance = null
   worker?.terminate()
   worker = null
   enginePromise = null
+  engineLoadToken = null
   progressListener = null
 }

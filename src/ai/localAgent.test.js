@@ -9,8 +9,10 @@ import {
   buildPlanOperations,
   buildTripBlueprint,
   compactConversationHistory,
+  isScheduleMutationRequest,
   parseAgentAction,
   parseTripRequest,
+  runLocalAgent,
   validateTripPlan,
 } from './localAgent.js'
 
@@ -35,6 +37,13 @@ test('removes thinking blocks before parsing', () => {
 
   assert.equal(action.mode, 'answer')
   assert.equal(action.message, '현재 일정입니다.')
+})
+
+test('accepts answer aliases from a chat response', () => {
+  const action = parseAgentAction('{"answer":"현재 일정은 첫째 날에 경복궁이 있어요."}')
+
+  assert.equal(action.mode, 'answer')
+  assert.equal(action.message, '현재 일정은 첫째 날에 경복궁이 있어요.')
 })
 
 test('extracts JSON when the model adds prose or trailing commas', () => {
@@ -190,4 +199,32 @@ test('keeps only recent user and assistant messages for the next model context',
   assert.equal(compacted[0].content, '메시지 2')
   assert.equal(compacted[9].content, '메시지 11')
   assert.equal(compacted.every(message => message.role === 'user' || message.role === 'assistant'), true)
+})
+
+test('distinguishes chat questions from explicit schedule changes', () => {
+  assert.equal(isScheduleMutationRequest('현재 일정 중에서 가장 여유로운 날이 언제야?'), false)
+  assert.equal(isScheduleMutationRequest('서울에서 가볼 만한 맛집을 추천해줘.'), false)
+  assert.equal(isScheduleMutationRequest('경복궁을 삭제해도 돼?'), false)
+  assert.equal(isScheduleMutationRequest('현재 일정 요약해줘.'), false)
+  assert.equal(isScheduleMutationRequest('성수동 일정을 하나 추가해줘.'), true)
+  assert.equal(isScheduleMutationRequest('경복궁 시간을 11시로 바꿔줘.'), true)
+  assert.equal(isScheduleMutationRequest('서울 2박 3일 일정 짜줘.'), true)
+  assert.equal(isScheduleMutationRequest('서울 2박 3일 일정 알려줘.'), false)
+})
+
+test('stops an already-cancelled agent before starting any orchestration', async () => {
+  const controller = new AbortController()
+  controller.abort()
+  const events = []
+
+  await assert.rejects(
+    runLocalAgent({
+      prompt: '서울 2박 3일 일정 짜줘.',
+      signal: controller.signal,
+      onEvent: event => events.push(event),
+    }),
+    error => error?.name === 'AbortError',
+  )
+
+  assert.deepEqual(events, [])
 })
