@@ -21,7 +21,8 @@ export default defineConfig(({ mode }) => {
         name: 'local-api',
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            if (req.method !== 'POST' || !req.url.startsWith('/api/')) return next()
+            const isGithubStarsRequest = req.method === 'GET' && req.url === '/api/github-stars'
+            if ((!isGithubStarsRequest && req.method !== 'POST') || !req.url.startsWith('/api/')) return next()
 
             const body = await readBody(req)
             res.setHeader('Content-Type', 'application/json')
@@ -81,6 +82,17 @@ export default defineConfig(({ mode }) => {
                 })
                 const data = await r.json()
                 res.end(JSON.stringify({ image: data?.payload?.imageBase64 }))
+
+              } else if (req.method === 'GET' && req.url === '/api/github-stars') {
+                const r = await fetch('https://github.com/hyuck0221/travel-plan', {
+                  headers: { Accept: 'text/html', 'User-Agent': 'Travelink GitHub Star Counter' },
+                })
+                const html = await r.text()
+                const match = html.match(/aria-label=["']([\d,]+)\s+users starred/i)
+                if (!r.ok || !match) {
+                  throw new Error('GitHub Star count was not found')
+                }
+                res.end(JSON.stringify({ stars: Number(match[1].replace(/,/g, '')) }))
 
               } else {
                 next()

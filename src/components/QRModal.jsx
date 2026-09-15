@@ -10,7 +10,7 @@ export default function QRModal({ image, onClose }) {
             <IconClose />
           </button>
         </div>
-        <div className="modal-body">
+        <div className="modal-body qr-modal-body">
           {image ? (
             <img
               src={image.startsWith('data:') ? image : `data:image/png;base64,${image}`}

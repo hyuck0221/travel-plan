@@ -187,6 +187,20 @@ export const IconNaver = (p) => (
   </Icon>
 )
 
+export const IconNaverMap = ({ size = 16, ...p }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...p}>
+    <path d="M12 21.35s7.2-6.18 7.2-12.05a7.2 7.2 0 1 0-14.4 0C4.8 15.17 12 21.35 12 21.35Z" fill="currentColor" />
+    <circle cx="12" cy="9.3" r="4.55" fill="white" />
+    <path d="M9.28 12.1V6.72h1.48l2.48 2.91V6.72h1.48v5.38h-1.48l-2.48-2.91v2.91H9.28Z" fill="#03C75A" />
+  </svg>
+)
+
+export const IconStar = (p) => (
+  <Icon {...p}>
+    <path d="m12 3 2.78 5.63 6.22.9-4.5 4.39 1.06 6.2L12 17.2l-5.56 2.92 1.06-6.2L3 9.53l6.22-.9L12 3Z" />
+  </Icon>
+)
+
 export const IconLoader = (p) => (
   <Icon {...p} className={`icon-spin ${p.className || ''}`}>
     <line x1="12" y1="2" x2="12" y2="6"/>

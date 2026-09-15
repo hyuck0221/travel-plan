@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { IconEdit, IconTrash, IconPin, IconGrip, IconNaver } from '../Icons'
+import { IconEdit, IconTrash, IconPin, IconGrip, IconNaverMap } from '../Icons'
 import DatePicker from '../DatePicker'
 import TimePicker from '../TimePicker'
 import PlaceSearchInput from '../PlaceSearchInput'
+import { buildNaverMapUrl } from '../../utils/naverMapUrl'
 
 const CATEGORIES = [
   { key: 'hotel',      emoji: '🏨', label: '숙소' },
@@ -92,6 +93,8 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
   }
 
   const enterEdit = (e) => { if (isLocked) return; e.stopPropagation(); setEditing(true); onEditingChange?.(true) }
+
+  const naverMapUrl = buildNaverMapUrl(item)
 
   const markerLabel = item.markerNumber != null
     ? <span className="marker-badge">{item.markerNumber}</span>
@@ -279,31 +282,26 @@ export default function ItineraryItem({ item, isActive, isCurrent, onUpdate, onD
           {item.cost && <div className="item-cost">{formatCostDisplay(item.cost)}</div>}
         </div>
         <div className="item-action-btns">
-          <button
-            className="item-icon-btn item-icon-btn--naver"
-            onClick={(e) => {
-              e.stopPropagation();
-              let query = "";
-              if (item.destination && item.address && item.destination !== item.address) {
-                query = `${item.destination} ${item.address}`;
-              } else {
-                query = item.destination || item.address || `${item.lat},${item.lng}`;
-              }
-              if (query) {
-                window.open(`https://map.naver.com/v5/search/${encodeURIComponent(query)}`, '_blank');
-              }
-            }}
-            title="네이버 지도에서 보기"
-          >
-            <IconNaver size={14} />
-          </button>
+          {naverMapUrl && (
+            <button
+              className="item-icon-btn item-icon-btn--naver"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(naverMapUrl, '_blank', 'noopener,noreferrer');
+              }}
+              title="네이버 지도에서 보기"
+              aria-label="네이버 지도에서 보기"
+            >
+              <IconNaverMap size={18} />
+            </button>
+          )}
           {!isLocked && (
             <>
-              <button className="item-icon-btn" onClick={enterEdit} title="편집">
+              <button className="item-icon-btn" onClick={enterEdit} title="편집" aria-label="편집">
                 <IconEdit size={14} />
               </button>
               <button className="item-icon-btn item-icon-btn--delete"
-                onClick={e => { e.stopPropagation(); onDelete(item.id) }} title="삭제">
+                onClick={e => { e.stopPropagation(); onDelete(item.id) }} title="삭제" aria-label="삭제">
                 <IconTrash size={14} />
               </button>
             </>

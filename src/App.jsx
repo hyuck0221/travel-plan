@@ -12,6 +12,7 @@ import { getMigratedDomainUrl, getMigrationContext, hasPlanData } from './utils/
 
 const MIN_PANEL_WIDTH = 240
 const MAX_PANEL_RATIO = 0.75
+const MOBILE_BREAKPOINT = 640
 
 export default function App() {
   const [migrationContext] = useState(() => getMigrationContext({
@@ -44,7 +45,7 @@ export default function App() {
     return saved ? Math.max(MIN_PANEL_WIDTH, parseInt(saved, 10)) : 400
   })
   const [viewMode, setViewMode] = useState('list') // 'list' or 'map'
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT)
   const [tracking, setTracking] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
   
@@ -52,7 +53,7 @@ export default function App() {
   const containerRef = useRef(null)
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth <= 768)
+    const checkMobile = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     checkMobile()
     window.addEventListener('resize', checkMobile)
     return () => window.removeEventListener('resize', checkMobile)

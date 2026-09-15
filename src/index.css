@@ -1,3 +1,4 @@
+/* Hallmark · macrostructure: responsive workbench · tone: utilitarian · anchor hue: blue */
 /* ==========================================
    Design Tokens
    ========================================== */
@@ -13,6 +14,11 @@
   --color-text-placeholder: #a0aec0;
   --color-danger: #ef4444;
   --color-danger-dark: #dc2626;
+  --color-success: #15803d;
+  --color-focus: #1d4ed8;
+  --color-warning-bg: #fff7d6;
+  --color-warning-border: #f3d36a;
+  --color-warning-text: #755c00;
   --color-active-bg: #EBF4FF;
   --color-active-border: #4F9CF9;
 
@@ -23,6 +29,19 @@
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
   --shadow-lg: 0 8px 24px rgba(0,0,0,0.16);
+
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-instant: 100ms;
+  --dur-short: 180ms;
+  --dur-menu: 240ms;
 
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
 }
@@ -56,7 +75,8 @@ svg { display: inline-block; vertical-align: middle; flex-shrink: 0; }
 
 html, body, #root {
   height: 100%;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: hidden;
   font-family: var(--font-sans);
   background: var(--color-bg);
   color: var(--color-text);
@@ -66,14 +86,20 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 input, textarea { font-family: inherit; user-select: text; }
 input::selection, textarea::selection { background: var(--color-primary); color: white; }
 
+:where(button, a, input, textarea):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 /* ==========================================
    Layout
    ========================================== */
 .app-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+  height: 100dvh;
+  min-height: 100svh;
+  overflow: clip;
 }
 
 .panels {
@@ -81,6 +107,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 
 /* ==========================================
@@ -92,16 +119,17 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   width: 100%;
   flex-shrink: 0;
   z-index: 100;
+  overflow: visible;
 }
 
 .limit-warning-bar {
-  background-color: #fff3cd;
-  color: #856404;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
   padding: 6px 20px;
   text-align: center;
   font-size: 0.85rem;
   font-weight: 600;
-  border-bottom: 1px solid #ffeeba;
+  border-bottom: 1px solid var(--color-warning-border);
   animation: fadeIn 0.3s ease-out;
 }
 
@@ -111,25 +139,30 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 .app-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  grid-template-areas: "left plan actions";
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
+  gap: 12px;
+  padding: 10px 20px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   box-shadow: var(--shadow-sm);
 }
 
 .header-left {
+  grid-area: left;
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
 }
 
 .header-title {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .header-icon { color: var(--color-primary); }
@@ -138,6 +171,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   font-size: 18px;
   font-weight: 700;
   color: var(--color-text);
+  white-space: nowrap;
 }
 
 .header-history {
@@ -156,7 +190,9 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   color: var(--color-text);
   border: 1px solid var(--color-border);
   background: var(--color-bg);
-  transition: all 0.15s;
+  transition: background-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
 }
 
 .history-btn:hover:not(:disabled) {
@@ -170,8 +206,13 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 .header-actions {
+  grid-area: actions;
   display: flex;
   gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 /* ==========================================
@@ -181,15 +222,20 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
+  min-height: 36px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: background-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
   white-space: nowrap;
 }
 
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
 
 .btn-primary {
   background: var(--color-primary);
@@ -224,6 +270,91 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 .btn-sm {
   padding: 5px 12px;
   font-size: 13px;
+  min-height: 32px;
+}
+
+.share-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.share-trigger {
+  justify-content: center;
+}
+
+.share-trigger-arrow {
+  transition: transform var(--dur-short) var(--ease-out);
+}
+
+.share-trigger-arrow--open { transform: rotate(180deg); }
+
+.share-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 220;
+  width: 268px;
+  padding: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: shareMenuIn var(--dur-menu) var(--ease-out);
+}
+
+@keyframes shareMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.share-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  text-align: left;
+  transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+
+.share-menu-item:hover:not(:disabled),
+.share-menu-item:focus-visible {
+  background: var(--color-active-bg);
+  color: var(--color-primary-dark);
+}
+
+.share-menu-item:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.share-menu-item-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.share-menu-item-copy strong,
+.share-menu-item-copy small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-menu-item-copy strong {
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.share-menu-item-copy small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 /* ==========================================
@@ -427,7 +558,9 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   color: var(--color-text-secondary);
   font-size: 13px;
   background: transparent;
-  transition: all 0.15s ease;
+  transition: background-color var(--dur-short) var(--ease-out),
+    border-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -587,20 +720,23 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   gap: 2px;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--dur-short) var(--ease-out);
 }
 
-.itinerary-item:hover .item-action-btns { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .itinerary-item:hover .item-action-btns { opacity: 1; }
+}
 
 .item-icon-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   border-radius: var(--radius-sm);
-  transition: background 0.1s;
+  color: var(--color-text-secondary);
+  transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
 }
 
 .item-icon-btn:hover { background: var(--color-border); }
@@ -609,13 +745,19 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 
 .item-icon-btn--naver {
   color: #03C75A;
-  border: 1px solid #e1e4e8;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f1fbf5;
+  border: 1px solid #bce9cb;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
 }
 .item-icon-btn--naver:hover {
   background-color: #03C75A;
   color: white;
   border-color: #03C75A;
+  box-shadow: 0 4px 10px rgba(3,199,90,0.2);
+}
+
+.item-icon-btn--naver:focus-visible {
+  outline-color: #03C75A;
 }
 
 /* Inline edit form */
@@ -714,7 +856,8 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   padding: 3px 9px;
   border: 1px solid var(--color-primary);
   border-radius: 20px;
-  transition: all 0.15s;
+  transition: background-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out);
   flex-shrink: 0;
 }
 
@@ -1224,7 +1367,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
    ========================================== */
 .app-footer {
   width: 100%;
-  padding: 16px;
+  padding: 14px 16px max(14px, env(safe-area-inset-bottom));
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
   text-align: center;
@@ -1241,13 +1384,16 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 .footer-links {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .footer-link-btn {
   font-size: 12px;
   color: var(--color-text-secondary);
-  transition: color 0.15s;
+  white-space: nowrap;
+  transition: color var(--dur-short) var(--ease-out);
 }
 
 .footer-link-btn:hover {
@@ -1263,9 +1409,17 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 .footer-github-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-secondary);
+  min-width: 28px;
+}
+
+.footer-github-stars--loading {
+  opacity: 0.65;
 }
 
 .footer-divider {
@@ -1289,6 +1443,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
   z-index: 1000;
   animation: fadeInDown 0.15s ease;
   backdrop-filter: blur(4px);
@@ -1299,9 +1454,12 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   width: min(360px, 90vw);
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  margin: auto;
 }
 
 .modal-content--legal {
@@ -1334,6 +1492,15 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   overflow-y: auto;
 }
 
+.qr-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
 .legal-content {
   font-size: 13px;
   line-height: 1.6;
@@ -1358,15 +1525,18 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 .qr-image {
-  width: 240px;
-  height: 240px;
+  display: block;
+  width: min(240px, 100%);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
 }
 
 .qr-placeholder {
-  width: 240px;
-  height: 240px;
+  width: min(240px, 100%);
+  aspect-ratio: 1;
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-sm);
   display: flex;
@@ -1387,8 +1557,10 @@ input::selection, textarea::selection { background: var(--color-primary); color:
    ========================================== */
 .plan-selector {
   position: relative;
-  flex: 1;
-  max-width: 260px;
+  grid-area: plan;
+  width: 100%;
+  min-width: 0;
+  max-width: 360px;
 }
 
 .plan-selector-btn {
@@ -1743,43 +1915,40 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 }
 
 /* ==========================================
-   Mobile Responsive
+   Responsive layout: mobile / tablet / PC
    ========================================== */
-@media (max-width: 768px) {
+@media (max-width: 39.99rem) {
   .app-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "left plan actions";
+    gap: 6px;
     padding: 8px 12px;
-    gap: 8px;
   }
 
   .header-left { gap: 8px; }
-  .header-title h1 { display: none; } /* Hide title text on very small screens */
-  
-  .header-actions {
-    gap: 4px;
-  }
-
+  .header-title h1 { display: none; }
+  .header-actions { gap: 4px; flex-wrap: nowrap; }
   .header-actions .btn {
-    padding: 6px;
-    min-width: 32px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 6px 8px;
     justify-content: center;
   }
-  
-  .header-actions .btn span:not(.icon-loader) {
-    display: none; /* Hide button text on mobile */
-  }
+  .header-actions .btn-lock-label { display: none; }
+  .header-actions .share-trigger-label { display: inline; }
+  .share-trigger { padding-inline: 10px !important; }
+  .share-trigger-arrow { display: none; }
+  .history-btn { width: 36px; height: 36px; }
 
-  .plan-selector {
-    max-width: 140px;
-  }
+  .plan-selector { max-width: none; }
+  .plan-selector-btn { padding-inline: 9px; font-size: 12px; }
 
   .panels {
     flex-direction: column;
     position: relative;
   }
 
-  .panel-resizer {
-    display: none;
-  }
+  .panel-resizer { display: none; }
 
   .itinerary-panel-wrapper, .map-panel-wrapper {
     width: 100% !important;
@@ -1787,7 +1956,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     position: absolute;
     top: 0;
     left: 0;
-    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.32s;
+    transition: transform 0.32s var(--ease-in-out), visibility 0.32s;
   }
 
   .itinerary-panel--hidden, .map-panel--hidden {
@@ -1799,10 +1968,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   .itinerary-panel--hidden { transform: translateX(-100%); }
 
   /* 같이보기 분할 모드 */
-  .panels--split {
-    flex-direction: column;
-  }
-
+  .panels--split { flex-direction: column; }
   .panels--split .itinerary-panel-wrapper,
   .panels--split .map-panel-wrapper {
     position: relative !important;
@@ -1812,25 +1978,16 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     pointer-events: auto !important;
     transition: none !important;
   }
+  .panels--split .map-panel-wrapper { order: 1; }
+  .panels--split .itinerary-panel-wrapper { order: 2; }
 
-  .panels--split .map-panel-wrapper {
-    order: 1;
-  }
+  .itinerary-content { padding-bottom: 100px; }
 
-  .panels--split .itinerary-panel-wrapper {
-    order: 2;
-  }
-
-  /* 하단 플로팅 버튼에 가리지 않도록 스크롤 여유 공간 확보 */
-  .itinerary-content {
-    padding-bottom: 100px;
-  }
-
-  /* 모바일 컨트롤 전체 래퍼 */
   .mobile-controls {
     position: fixed;
-    bottom: 24px;
+    bottom: max(12px, env(safe-area-inset-bottom));
     left: 50%;
+    width: calc(100% - 24px);
     transform: translateX(-50%);
     z-index: 1000;
     display: flex;
@@ -1839,15 +1996,12 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     gap: 0;
   }
 
-  /* 같이보기 버튼 — pill 바로 위에 가로로 넓게 붙어서 등장 */
   .split-view-hint {
-    width: 100%;
+    width: min(220px, 100%);
     transform: translateY(8px);
     opacity: 0;
     pointer-events: none;
-    transition:
-      transform 0.26s cubic-bezier(0.34, 1.4, 0.64, 1),
-      opacity   0.2s ease;
+    transition: transform var(--dur-menu) var(--ease-out), opacity var(--dur-short) var(--ease-out);
   }
 
   .split-view-hint--visible {
@@ -1858,6 +2012,7 @@ input::selection, textarea::selection { background: var(--color-primary); color:
 
   .split-view-btn {
     width: 100%;
+    min-height: 28px;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 10px 10px 0 0;
@@ -1877,10 +2032,9 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     padding: 4px;
     box-shadow: var(--shadow-lg);
     border: 1px solid var(--color-border);
-    transition: border-radius 0.26s cubic-bezier(0.34, 1.4, 0.64, 1);
+    transition: border-radius var(--dur-menu) var(--ease-out);
   }
 
-  /* 같이보기 버튼이 보일 때 pill 모서리를 같이보기 버튼(10px)과 맞춤 */
   .split-view-hint--visible + .mobile-view-switcher {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
@@ -1889,7 +2043,8 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   }
 
   .switcher-btn {
-    padding: 8px 16px;
+    min-height: 44px;
+    padding: 8px 15px;
     border-radius: 26px;
     font-size: 13px;
     font-weight: 600;
@@ -1897,76 +2052,39 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     display: flex;
     align-items: center;
     gap: 6px;
-    transition: background 0.2s, color 0.2s, border-radius 0.2s;
+    transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out), border-radius var(--dur-short) var(--ease-out);
     white-space: nowrap;
   }
 
-  /* ── state: list ── 일정(active) */
-  .mobile-view-switcher--list .switcher-btn--list {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  /* ── state: map ── 지도(active) */
-  .mobile-view-switcher--map .switcher-btn--map {
-    background: var(--color-primary);
-    color: white;
-  }
-
-  /* ── state: map-tracking ── [지도+현위치] 하나의 박스 */
-  .mobile-view-switcher--map-tracking .switcher-btn--map {
-    background: var(--color-primary);
-    color: white;
-    border-radius: 26px 0 0 26px;
-  }
-  .mobile-view-switcher--map-tracking .switcher-location-btn {
-    background: var(--color-primary);
-    color: white;
-    border-radius: 0 26px 26px 0;
-  }
-
-  /* ── state: both ── [일정+지도] 하나의 박스 */
-  .mobile-view-switcher--both .switcher-btn--list {
-    background: var(--color-primary);
-    color: white;
-    border-radius: 26px 0 0 26px;
-  }
-  .mobile-view-switcher--both .switcher-btn--map {
-    background: var(--color-primary);
-    color: white;
-    border-radius: 0 26px 26px 0;
-  }
-
-  /* ── state: both-tracking ── [일정+지도+현위치] 하나의 박스 */
-  .mobile-view-switcher--both-tracking .switcher-btn--list {
-    background: var(--color-primary);
-    color: white;
-    border-radius: 26px 0 0 26px;
-  }
-  .mobile-view-switcher--both-tracking .switcher-btn--map {
-    background: var(--color-primary);
-    color: white;
-    border-radius: 0;
-  }
+  .mobile-view-switcher--list .switcher-btn--list,
+  .mobile-view-switcher--map .switcher-btn--map,
+  .mobile-view-switcher--map-tracking .switcher-btn--map,
+  .mobile-view-switcher--map-tracking .switcher-location-btn,
+  .mobile-view-switcher--both .switcher-btn--list,
+  .mobile-view-switcher--both .switcher-btn--map,
+  .mobile-view-switcher--both-tracking .switcher-btn--list,
+  .mobile-view-switcher--both-tracking .switcher-btn--map,
   .mobile-view-switcher--both-tracking .switcher-location-btn {
     background: var(--color-primary);
     color: white;
-    border-radius: 0 26px 26px 0;
   }
 
+  .mobile-view-switcher--map-tracking .switcher-btn--map { border-radius: 26px 0 0 26px; }
+  .mobile-view-switcher--map-tracking .switcher-location-btn { border-radius: 0 26px 26px 0; }
+  .mobile-view-switcher--both .switcher-btn--list { border-radius: 26px 0 0 26px; }
+  .mobile-view-switcher--both .switcher-btn--map { border-radius: 0 26px 26px 0; }
+  .mobile-view-switcher--both-tracking .switcher-btn--list { border-radius: 26px 0 0 26px; }
+  .mobile-view-switcher--both-tracking .switcher-btn--map { border-radius: 0; }
+  .mobile-view-switcher--both-tracking .switcher-location-btn { border-radius: 0 26px 26px 0; }
+
   .switcher-location-btn {
+    min-width: 0;
     padding: 8px 0;
     max-width: 0;
     overflow: hidden;
     opacity: 0;
     pointer-events: none;
-    transition:
-      max-width    0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
-      padding      0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
-      opacity      0.18s ease,
-      background   0.2s ease,
-      color        0.2s ease,
-      border-radius 0.2s ease;
+    transition: max-width var(--dur-menu) var(--ease-out), padding var(--dur-menu) var(--ease-out), opacity var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out), border-radius var(--dur-short) var(--ease-out);
   }
 
   .switcher-location-btn--visible {
@@ -1976,51 +2094,54 @@ input::selection, textarea::selection { background: var(--color-primary); color:
     pointer-events: auto;
   }
 
-  .search-bar-wrapper {
-    top: 8px;
-    width: calc(100% - 16px);
-  }
-
-  .map-controls--desktop {
-    display: none;
-  }
-
-  /* Make action buttons visible on touch */
-  .item-action-btns {
-    opacity: 1 !important;
-  }
-
-  .category-btn {
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
-  }
-
-  .item-icon-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-  }
-
-  .itinerary-item {
-    padding: 12px;
-  }
-
-  .item-destination {
-    font-size: 15px;
-  }
-
-  .item-address, .item-memo {
-    font-size: 13px;
-  }
+  .search-bar-wrapper { top: 8px; width: calc(100% - 16px); }
+  .map-controls--desktop { display: none; }
+  .item-action-btns { opacity: 1 !important; }
+  .category-btn { width: 36px; height: 36px; font-size: 18px; }
+  .item-icon-btn { width: 36px; height: 36px; font-size: 16px; }
+  .itinerary-item { padding: 12px; }
+  .item-destination { font-size: 15px; }
+  .item-address, .item-memo { font-size: 13px; }
 }
 
-@media (min-width: 769px) {
-  .mobile-view-switcher {
-    display: none;
+@media (min-width: 40rem) and (max-width: 63.99rem) {
+  .app-header {
+    grid-template-columns: minmax(0, 1fr) minmax(160px, 1fr);
+    grid-template-areas:
+      "left plan"
+      "actions actions";
+    padding: 10px 16px;
+    row-gap: 8px;
   }
 
-  .map-controls--desktop {
-    display: flex;
+  .header-left { gap: 12px; }
+  .plan-selector { max-width: none; }
+  .header-actions { padding-top: 1px; }
+  .itinerary-panel-wrapper {
+    min-width: 280px;
+    max-width: calc(100% - 280px);
+  }
+  .panel-resizer { width: 6px; }
+  .item-action-btns { opacity: 1; }
+}
+
+@media (min-width: 64rem) {
+  .app-header { padding-inline: 20px; }
+  .mobile-view-switcher { display: none; }
+  .map-controls--desktop { display: flex; }
+  .itinerary-panel-wrapper { min-width: 280px; max-width: calc(100% - 300px); }
+}
+
+@media (pointer: coarse) {
+  .item-action-btns { opacity: 1; }
+  .item-icon-btn { width: 36px; height: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

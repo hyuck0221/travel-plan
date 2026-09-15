@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import QRModal from './QRModal'
 import PlanSelector from './PlanSelector'
-import { IconLogo, IconUndo, IconRedo, IconLink, IconQR, IconShare, IconLoader, IconLock, IconUnlock } from './Icons'
+import { IconLogo, IconUndo, IconRedo, IconLink, IconQR, IconShare, IconLoader, IconLock, IconUnlock, IconChevronDown } from './Icons'
 
 // In-memory cache for the current session
 const shortenMemCache = new Map()
@@ -50,8 +50,35 @@ export default function Header({
   const [qrOpen, setQrOpen] = useState(false)
   const [qrImage, setQrImage] = useState(null)
   const [loading, setLoading] = useState('')
+  const [shareOpen, setShareOpen] = useState(false)
+  const shareMenuRef = useRef(null)
+  const shareTriggerRef = useRef(null)
+
+  useEffect(() => {
+    if (!shareOpen) return undefined
+
+    const handlePointerDown = (event) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(event.target)) {
+        setShareOpen(false)
+      }
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShareOpen(false)
+        requestAnimationFrame(() => shareTriggerRef.current?.focus())
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [shareOpen])
 
   const handleCopyLink = async () => {
+    setShareOpen(false)
     if (isUrlLimitReached) {
       // 65535자 초과 시: 단축 없이 바로 복사
       try {
@@ -73,6 +100,7 @@ export default function Header({
   }
 
   const handleQR = async () => {
+    setShareOpen(false)
     if (isUrlLimitReached) return // 초과 시 비활성화
 
     setLoading('qr')
@@ -91,6 +119,7 @@ export default function Header({
   }
 
   const handleShare = async () => {
+    setShareOpen(false)
     let shareUrl = window.location.href
     
     // 65535자 이내일 때만 단축 시도
@@ -140,32 +169,73 @@ export default function Header({
               className={`btn${isLocked ? ' btn-lock--locked' : ' btn-secondary'}`}
               onClick={onToggleLock}
               title={isLocked ? '잠금 해제' : '편집 잠금'}
+              aria-label={isLocked ? '잠금 해제' : '편집 잠금'}
             >
               {isLocked ? <IconLock /> : <IconUnlock />}
-              <span>{isLocked ? '잠금 해제' : '잠금'}</span>
+              <span className="btn-lock-label">{isLocked ? '잠금 해제' : '잠금'}</span>
             </button>
-            <button
-              className="btn btn-secondary"
-              onClick={handleCopyLink}
-              disabled={!!loading}
-              title={isUrlLimitReached ? "전체 링크 복사" : "단축 링크 복사"}
-            >
-              {loading === 'shorten' ? <IconLoader /> : <IconLink />}
-              <span>{isUrlLimitReached ? "링크 복사" : "링크 단축하여 복사"}</span>
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={handleQR}
-              disabled={!!loading || isUrlLimitReached}
-              title={isUrlLimitReached ? "용량 초과로 비활성" : "QR 코드 생성"}
-            >
-              {loading === 'qr' ? <IconLoader /> : <IconQR />}
-              <span>QR</span>
-            </button>
-            <button className="btn btn-primary" onClick={handleShare} title="공유하기">
-              <IconShare />
-              <span>공유</span>
-            </button>
+
+            <div className="share-menu-wrap" ref={shareMenuRef}>
+              <button
+                ref={shareTriggerRef}
+                className="btn btn-primary share-trigger"
+                onClick={() => setShareOpen(v => !v)}
+                disabled={!!loading}
+                title="공유 옵션 열기"
+                aria-label="공유 옵션"
+                aria-haspopup="menu"
+                aria-expanded={shareOpen}
+              >
+                {loading ? <IconLoader /> : <IconShare />}
+                <span className="share-trigger-label">공유</span>
+                <IconChevronDown size={14} className={`share-trigger-arrow${shareOpen ? ' share-trigger-arrow--open' : ''}`} />
+              </button>
+
+              {shareOpen && (
+                <div className="share-menu" role="menu" aria-label="공유 옵션">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="share-menu-item"
+                    onClick={handleCopyLink}
+                    disabled={!!loading}
+                  >
+                    <IconLink size={17} />
+                    <span className="share-menu-item-copy">
+                      <strong>{isUrlLimitReached ? '링크 복사' : '링크 단축하여 복사'}</strong>
+                      <small>{isUrlLimitReached ? '전체 링크를 클립보드에 복사' : '짧은 링크를 클립보드에 복사'}</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="share-menu-item"
+                    onClick={handleQR}
+                    disabled={!!loading || isUrlLimitReached}
+                    title={isUrlLimitReached ? '용량 초과로 비활성화됨' : 'QR 코드 생성'}
+                  >
+                    <IconQR size={17} />
+                    <span className="share-menu-item-copy">
+                      <strong>QR 코드</strong>
+                      <small>{isUrlLimitReached ? '링크 용량을 줄인 뒤 사용 가능' : '휴대폰으로 스캔할 QR 생성'}</small>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="share-menu-item"
+                    onClick={handleShare}
+                    disabled={!!loading}
+                  >
+                    <IconShare size={17} />
+                    <span className="share-menu-item-copy">
+                      <strong>공유하기</strong>
+                      <small>기기 공유 메뉴 열기</small>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
