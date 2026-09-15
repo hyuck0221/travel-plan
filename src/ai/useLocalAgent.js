@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { cancelLocalEngineLoad, interruptLocalEngineGeneration, isLocalEngineReady, runLocalAgent } from './localAgent.js'
+import { cancelLocalEngineLoad, interruptLocalEngineGeneration, isLocalEngineReady, runLocalAgent, warmLocalEngine } from './localAgent.js'
 
 export function useLocalAgent({ onEvent, onApplyPlan }) {
   const activeRunRef = useRef(null)
@@ -104,10 +104,13 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
     activeRunRef.current = null
   }, [])
 
+  const warmUp = useCallback((onProgress) => warmLocalEngine(onProgress), [])
+
   return {
     ...state,
     isRunning: ['loading', 'working', 'applying'].includes(state.status),
     run,
     cancel,
+    warmUp,
   }
 }

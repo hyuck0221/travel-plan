@@ -13,6 +13,7 @@ import {
   parseAgentAction,
   parseTripRequest,
   runLocalAgent,
+  sanitizeSearchQuery,
   validateTripPlan,
 } from './localAgent.js'
 
@@ -210,6 +211,29 @@ test('distinguishes chat questions from explicit schedule changes', () => {
   assert.equal(isScheduleMutationRequest('경복궁 시간을 11시로 바꿔줘.'), true)
   assert.equal(isScheduleMutationRequest('서울 2박 3일 일정 짜줘.'), true)
   assert.equal(isScheduleMutationRequest('서울 2박 3일 일정 알려줘.'), false)
+})
+
+test('does not send schedule edit instructions to Naver as a place query', () => {
+  const currentItems = [{ id: 'place-1', destination: '성수동', date: '2026-09-16' }]
+
+  assert.equal(
+    sanitizeSearchQuery('특정 일정을 고쳐줘', '특정 일정을 고쳐줘', currentItems),
+    '',
+  )
+  assert.equal(
+    sanitizeSearchQuery('성수동 일정을 조금 더 늘려줘', '성수동 일정을 조금 더 늘려줘', currentItems),
+    '성수동',
+  )
+  assert.equal(
+    sanitizeSearchQuery('경복궁을 남산서울타워로 바꿔줘', '경복궁을 남산서울타워로 바꿔줘', [
+      { id: 'place-1', destination: '경복궁' },
+    ]),
+    '남산서울타워',
+  )
+  assert.equal(
+    sanitizeSearchQuery('서울 맛집 추천해줘', '서울 맛집 추천해줘', []),
+    '서울 맛집',
+  )
 })
 
 test('stops an already-cancelled agent before starting any orchestration', async () => {

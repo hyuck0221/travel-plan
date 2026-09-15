@@ -196,6 +196,15 @@ export default function App() {
     onApplyPlan: handleAiApplyPlan,
   })
 
+  useEffect(() => {
+    if (!aiOpen || localAgent.isRunning) return
+
+    // 전체 일정 생성은 모델을 건너뛰므로, AI 패널을 연 시점에 모델을
+    // 백그라운드에서 준비해 후속 채팅이 첫 모델 로딩을 기다리지 않게 한다.
+    // 실패는 다음 실제 요청에서 기존 오류 안내로 처리한다.
+    localAgent.warmUp().catch(() => {})
+  }, [aiOpen, localAgent.isRunning, localAgent.warmUp])
+
   const handleAiSubmit = useCallback((prompt) => {
     const planId = activeId
     if (!planId) return

@@ -1,4 +1,4 @@
-import { searchPlaces } from './mcpClient.js'
+import { getSearchTimeoutMessage, isSearchTimeoutError, searchPlaces } from './mcpClient.js'
 
 export const LOCAL_MODEL_ID = 'Qwen2.5-3B-Instruct-q4f16_1-MLC'
 export const LOCAL_MODEL_LABEL = 'Qwen 2.5 3B'
@@ -56,6 +56,9 @@ const SYSTEM_PROMPT = [
   '7. 장소가 여러 개면 사용자의 순서와 시간 흐름을 유지한다. 현재 일정의 의도하지 않은 항목을 임의로 지우지 않는다.',
   '8. 좌표는 알고 있을 때만 숫자로 넣고, 모르면 생략한다. 브라우저가 장소 검색 결과로 보강한다.',
   '9. 제목을 바꾸라는 요청이 없으면 기존 title을 유지한다.',
+  '10. query는 네이버 지도에 직접 전달되므로 반드시 구체적인 장소명 하나만 넣는다. 사용자의 전체 문장, 일정, 일정 수정, 고쳐, 변경, 추가, 삭제, 해줘 같은 지시어를 query에 넣지 않는다.',
+  '11. 기존 일정 수정 요청에서 검색이 필요하면 currentPlan의 실제 장소명 또는 사용자가 바꾸려는 새 장소명만 query로 사용한다. 장소명이 분명하지 않으면 mode=search를 사용하지 말고 mode=apply 또는 mode=answer로 답한다.',
+  '12. 검색 결과를 받은 뒤에도 같은 규칙을 지키며, 검색어를 바꿀 때는 장소명 자체의 띄어쓰기·지역명·위치 같은 보조어만 조금 바꾼다.',
   '',
   '출력 JSON 형식:',
   '{"mode":"apply|search|answer","title":"제목","message":"질문에 대한 답변 또는 완료 메시지","query":"검색어 또는 빈 문자열","items":[{"id":"기존 id 또는 빈 문자열","destination":"장소","address":"","lat":0,"lng":0,"memo":"","date":"YYYY-MM-DD","time":"HH:mm","category":"","cost":""}]}',
@@ -80,12 +83,25 @@ export function isLocalEngineReady() {
   return engineReady
 }
 
+/**
+ * AI 패널을 연 직후 모델을 백그라운드에서 준비한다.
+ *
+ * 전체 일정 생성은 모델을 사용하지 않는 빠른 경로이므로, 첫 요청이 끝난
+ * 뒤의 일반 대화에서 처음 모델을 로드하지 않도록 같은 엔진 Promise를
+ * 미리 만들어 둔다. 이미 로드 중이면 기존 Promise를 그대로 공유한다.
+ */
+export function warmLocalEngine(onProgress) {
+  if (engineReady && engineInstance) return Promise.resolve(engineInstance)
+  return getLocalEngine(onProgress)
+}
+
 export async function getLocalEngine(onProgress) {
   if (!globalThis.navigator?.gpu) {
     throw new Error('이 브라우저는 WebGPU를 지원하지 않아 로컬 AI를 실행할 수 없습니다.')
   }
 
   progressListener = onProgress
+  if (engineReady && engineInstance) return engineInstance
   if (enginePromise) return enginePromise
 
   const loadToken = { cancelled: false, reject: null, promise: null }
@@ -311,6 +327,60 @@ function isCoordinate(value) {
 
 function normalizeDestination(value) {
   return safeString(value, 180).toLowerCase().replace(/\s+/g, '')
+}
+
+const SEARCH_INSTRUCTION_PATTERN = /(?:일정|코스|목록|시간|날짜|메모|노트|고쳐|고치|수정|변경|바꾸|교체|삭제|지워|추가|넣어|더해|늘려|줄여|만들|짜|구성|계획|해줘|해주세요|부탁|찾아|검색|알려|추천|조회|확인)/u
+const SEARCH_GENERIC_PATTERN = /(?:특정|현재|기존|지금|내|우리|일정|코스|목록|시간|날짜|메모|노트)/u
+
+function stripSearchInstruction(value) {
+  return safeString(value, 180)
+    .replace(/\s*(?:찾아|검색|알려|추천|조회|확인|고쳐|고치|수정|변경|바꿔|교체|삭제|지워|추가|넣어|더해|늘려|줄여|만들어|짜줘|구성해|계획해)(?:\s*(?:줘|주세요|해줘|해주세요|봐|봐줘))?\s*$/u, '')
+    .replace(/\s*(?:해줘|해주세요|부탁해|부탁)\s*$/u, '')
+    .replace(/[을를이가은는]$/u, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * 모델이 “성수동 일정을 고쳐줘” 같은 사용자 문장 전체를 query로
+ * 반환하더라도 지도에는 실제 장소명만 전달한다. 교체·추가 대상과 현재
+ * 카드명을 먼저 우선하고, 장소명을 특정할 수 없으면 검색 자체를 막는다.
+ */
+export function sanitizeSearchQuery(query, prompt = '', currentItems = []) {
+  const raw = safeString(query, 180)
+  if (!raw) return ''
+
+  const normalizedRaw = normalizeDestination(raw)
+  const replacements = extractExplicitDestinationReplacements(prompt, currentItems)
+    .map(({ destination }) => safeString(destination, 180))
+  const additions = extractExplicitAddDestinations(prompt)
+  const currentDestinations = currentItems
+    .map(item => safeString(item?.destination, 180))
+    .filter(Boolean)
+
+  // 교체할 새 장소를 기존 장소보다 먼저 선택한다.
+  for (const destination of [...replacements, ...additions, ...currentDestinations]) {
+    const normalizedDestination = normalizeDestination(destination)
+    if (normalizedDestination && normalizedRaw.includes(normalizedDestination)) return destination
+  }
+
+  const cleaned = stripSearchInstruction(raw)
+  if (!cleaned || (SEARCH_INSTRUCTION_PATTERN.test(raw) && SEARCH_GENERIC_PATTERN.test(cleaned))) return ''
+
+  const candidate = cleanPlaceCandidate(cleaned)
+  if (!candidate || SEARCH_GENERIC_PATTERN.test(candidate)) return ''
+  return candidate
+}
+
+function createSearchAttemptReporter(onEvent, signal) {
+  return ({ query, attempt, maxAttempts }) => {
+    if (attempt <= 1 || signal?.aborted) return
+    onEvent?.({
+      type: 'stage',
+      key: 'search-retry',
+      label: `${query} 검색어를 바꿔 다시 검색 중 (${attempt}/${maxAttempts})`,
+    })
+  }
 }
 
 function makeId() {
@@ -602,13 +672,20 @@ async function buildDeterministicTripItems(request, signal, onEvent, searchResul
     let results = searchResults.get(normalizeDestination(query))
     if (!results) {
       try {
-        results = await searchPlaces(query, signal)
+        results = await searchPlaces(query, signal, {
+          onAttempt: createSearchAttemptReporter(onEvent, signal),
+        })
         throwIfAborted(signal)
       } catch (error) {
         if (error?.name === 'AbortError') throw error
         throwIfAborted(signal)
         results = []
-        onEvent?.({ type: 'warning', label: query + ' 검색에 실패해 장소명만 반영합니다.' })
+        onEvent?.({
+          type: 'warning',
+          label: isSearchTimeoutError(error)
+            ? getSearchTimeoutMessage(query, error.reason)
+            : query + ' 검색에 실패해 장소명만 반영합니다.',
+        })
       }
       searchResults.set(normalizeDestination(query), results)
     }
@@ -916,7 +993,7 @@ function shouldProtectCurrentItems(prompt, currentItems, nextItems) {
   return true
 }
 
-async function enrichItems(items, currentItems, signal, onEvent, knownResults = new Map()) {
+async function enrichItems(items, currentItems, signal, onEvent, knownResults = new Map(), prompt = '') {
   const existingById = new Map(currentItems.map(item => [item.id, item]))
   const searchCache = new Map(knownResults)
   const enriched = []
@@ -933,18 +1010,31 @@ async function enrichItems(items, currentItems, signal, onEvent, knownResults = 
       continue
     }
 
-    const query = item.destination
+    const query = sanitizeSearchQuery(item.destination, prompt, currentItems)
+    if (!query) {
+      // 모델이 장소명 대신 “일정을 수정해줘” 같은 지시문을 카드의
+      // destination으로 넣어도 그 문장을 네이버에 전송하지 않는다.
+      enriched.push(item)
+      continue
+    }
     onEvent?.({ type: 'search-start', itemId: item.id, query, label: query + ' 위치 확인 중' })
     let results = searchCache.get(normalizeDestination(query))
     if (!results) {
       try {
-        results = await searchPlaces(query, signal)
+        results = await searchPlaces(query, signal, {
+          onAttempt: createSearchAttemptReporter(onEvent, signal),
+        })
         throwIfAborted(signal)
       } catch (error) {
         if (error?.name === 'AbortError') throw error
         throwIfAborted(signal)
         results = []
-        onEvent?.({ type: 'warning', label: query + ' 좌표를 확인하지 못해 장소명만 반영합니다.' })
+        onEvent?.({
+          type: 'warning',
+          label: isSearchTimeoutError(error)
+            ? getSearchTimeoutMessage(query, error.reason)
+            : query + ' 좌표를 확인하지 못해 장소명만 반영합니다.',
+        })
       }
       searchCache.set(normalizeDestination(query), results)
     }
@@ -1144,24 +1234,38 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
 
       if (action.mode !== 'search' || !action.query) break
 
-      const normalizedQuery = normalizeDestination(action.query)
+      const searchQuery = sanitizeSearchQuery(action.query, cleanPrompt, currentItems)
+      if (!searchQuery) {
+        onEvent?.({ type: 'stage', key: 'repair', label: '편집 지시문을 장소 검색어로 사용하지 않고 요청을 계속 처리 중' })
+        action = null
+        break
+      }
+
+      const normalizedQuery = normalizeDestination(searchQuery)
       if (searchedQueries.has(normalizedQuery)) {
         onEvent?.({ type: 'stage', key: 'repair', label: '같은 검색이 반복되어 브라우저 일정 편집으로 전환 중' })
         break
       }
       searchedQueries.add(normalizedQuery)
-      onEvent?.({ type: 'stage', key: 'search', label: action.query + ' 장소 검색 중' })
+      onEvent?.({ type: 'stage', key: 'search', label: searchQuery + ' 장소 검색 중' })
       let results
       try {
-        results = await searchPlaces(action.query, signal)
+        results = await searchPlaces(searchQuery, signal, {
+          onAttempt: createSearchAttemptReporter(onEvent, signal),
+        })
       } catch (error) {
         if (error?.name === 'AbortError') throw error
         throwIfAborted(signal)
-        onEvent?.({ type: 'warning', label: action.query + ' 검색을 완료하지 못했습니다.' })
+        onEvent?.({
+          type: 'warning',
+          label: isSearchTimeoutError(error)
+            ? getSearchTimeoutMessage(searchQuery, error.reason)
+            : searchQuery + ' 검색을 완료하지 못했습니다.',
+        })
         break
       }
       throwIfAborted(signal)
-      searchResults.set(normalizeDestination(action.query), results)
+      searchResults.set(normalizeDestination(searchQuery), results)
       messages.push(
         { role: 'assistant', content: rawText },
         {
@@ -1169,7 +1273,8 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
           content: (mutationRequested
             ? '검색 결과를 참고해서 요청을 일정에 반영할지 판단하고, 반드시 위 JSON 형식의 apply 또는 answer로 답해줘.'
             : '사용자는 일정 변경을 요청하지 않았다. 검색 결과를 참고해 질문에 실제로 답하고, 기존 일정은 절대 수정하지 말아줘. mode=answer, items=[]로 답해줘.')
-            + ' 검색 결과: ' + JSON.stringify(results.slice(0, 5)),
+            + ` 실제 지도 검색어는 "${searchQuery}"였고, 이 장소명과 검색 결과만 참고해 답해줘. 검색 결과: `
+            + JSON.stringify(results.slice(0, 5)),
         },
       )
     }
@@ -1276,7 +1381,7 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
   }
 
   onEvent?.({ type: 'stage', key: 'search', label: '일정 장소의 위치 정보 보강 중' })
-  const enrichedItems = await enrichItems(safeItems, currentItems, signal, onEvent, searchResults)
+  const enrichedItems = await enrichItems(safeItems, currentItems, signal, onEvent, searchResults, cleanPrompt)
   throwIfAborted(signal)
   const nextPlan = {
     title: safeString(action.title || currentPlan?.title, 80),
