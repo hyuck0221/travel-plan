@@ -41,8 +41,8 @@ function mcpSearchResponse(items) {
   })
 }
 
-test('uses the lighter browser model by default and a smaller fallback', () => {
-  assert.equal(LOCAL_MODEL_ID, 'Qwen2.5-3B-Instruct-q4f16_1-MLC')
+test('uses Qwen 3 1.7B as the default browser model and fallback', () => {
+  assert.equal(LOCAL_MODEL_ID, 'Qwen3-1.7B-q4f16_1-MLC')
   assert.equal(LOCAL_MODEL_FALLBACK_ID, 'Qwen3-1.7B-q4f16_1-MLC')
 })
 

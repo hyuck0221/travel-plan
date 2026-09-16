@@ -284,7 +284,7 @@ export async function getLocalEngine(onProgress, requestedModelId = LOCAL_MODEL_
 
       if (modelId === LOCAL_MODEL_FALLBACK_ID) throw primaryError
 
-      // Qwen 2.5 3B가 WebGPU 메모리 한도를 넘는 기기에서는 이미 실패한
+      // 선택한 모델이 WebGPU 메모리 한도를 넘는 기기에서는 이미 실패한
       // 워커를 재사용하지 않고, 브라우저용 초경량 모델로 한 번만 전환한다.
       worker?.terminate()
       worker = null
@@ -1577,8 +1577,8 @@ async function createCompletion(engine, messages, {
     top_p: strictJson ? 0.8 : 0.9,
     max_tokens: maxTokens,
     stream: false,
-    // Qwen3 fallback의 내부 추론 토큰이 JSON 출력 예산을 모두 소비하지
-    // 않도록 비활성화한다. Qwen2.5에서는 이 옵션을 보내지 않는다.
+    // Qwen3 계열 모델의 내부 추론 토큰이 JSON 출력 예산을 모두 소비하지
+    // 않도록 비활성화한다.
     ...(activeModelId.startsWith('Qwen3') ? { extra_body: { enable_thinking: false } } : {}),
   }
 

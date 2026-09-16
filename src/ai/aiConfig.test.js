@@ -36,9 +36,11 @@ test('persists the selected local model without saving chat history', () => {
   })
 })
 
-test('labels Qwen 2.5 3B as the default local model', () => {
-  assert.equal(LOCAL_MODEL_OPTIONS[0].label, 'Qwen 2.5 3B')
+test('places Qwen 3 1.7B first as the default local model', () => {
+  assert.equal(LOCAL_MODEL_OPTIONS[0].id, 'Qwen3-1.7B-q4f16_1-MLC')
+  assert.equal(LOCAL_MODEL_OPTIONS[0].label, 'Qwen 3 1.7B')
   assert.equal(LOCAL_MODEL_OPTIONS[0].badge, '기본')
+  assert.equal(LOCAL_MODEL_OPTIONS.some(model => /Qwen 2\.5|Qwen 2\.6/u.test(model.label)), false)
 })
 
 test('persists an external provider connection and selected model', () => {
