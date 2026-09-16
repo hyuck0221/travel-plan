@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cancelLocalEngineLoad, interruptLocalEngineGeneration, isLocalEngineReady, runLocalAgent, warmLocalEngine } from './localAgent.js'
 
-export function useLocalAgent({ onEvent, onApplyPlan }) {
+function isExternalReady(config) {
+  return config?.mode === 'api'
+    && Boolean(config?.external?.connected && config?.external?.modelId)
+}
+
+export function useLocalAgent({ onEvent, onApplyPlan, aiConfig = { mode: 'local' } }) {
   const activeRunRef = useRef(null)
   const onEventRef = useRef(onEvent)
   const onApplyPlanRef = useRef(onApplyPlan)
@@ -32,8 +37,10 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
     onEventRef.current?.({ type: 'cancelled', label: '작업을 중단했습니다.' })
   }
 
-  const run = useCallback(async ({ prompt, currentPlan, conversationHistory = [], isLocked = false }) => {
+  const run = useCallback(async ({ prompt, currentPlan, conversationHistory = [], isLocked = false, aiConfig: requestedAiConfig }) => {
     if (activeRunRef.current) return null
+
+    const runAiConfig = requestedAiConfig || aiConfig
 
     const controller = new AbortController()
     const runContext = {
@@ -44,7 +51,7 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
     activeRunRef.current = runContext
     const isCurrentRun = () => activeRunRef.current === runContext && !runContext.cancelled && !controller.signal.aborted
 
-    const engineReady = isLocalEngineReady()
+    const engineReady = runAiConfig?.mode === 'api' ? isExternalReady(runAiConfig) : isLocalEngineReady()
     setState({
       status: engineReady ? 'working' : 'loading',
       progress: engineReady ? 1 : 0,
@@ -60,6 +67,7 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
         currentPlan,
         conversationHistory,
         isLocked,
+        aiConfig: runAiConfig,
         signal: controller.signal,
         onEvent: event => {
           if (!isCurrentRun()) return
@@ -101,7 +109,7 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
         modelReady: true,
         modelLoading: false,
       })
-      return result
+          return result
     } catch (error) {
       if (runContext.cancelled || controller.signal.aborted || error?.name === 'AbortError') {
         reportCancellation(runContext)
@@ -113,7 +121,7 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
         progress: 0,
         error: error.message || 'AI 작업을 완료하지 못했습니다.',
         progressText: '',
-        modelReady: isLocalEngineReady(),
+        modelReady: runAiConfig?.mode === 'api' ? isExternalReady(runAiConfig) : isLocalEngineReady(),
         modelLoading: false,
       })
       onEventRef.current?.({ type: 'error', label: error.message || 'AI 작업을 완료하지 못했습니다.' })
@@ -121,7 +129,7 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
     } finally {
       if (activeRunRef.current === runContext) activeRunRef.current = null
     }
-  }, [])
+  }, [aiConfig])
 
   const cancel = useCallback(() => {
     const runContext = activeRunRef.current
@@ -141,6 +149,17 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
   }, [])
 
   const warmUp = useCallback((onProgress) => {
+    if (aiConfig?.mode === 'api') {
+      setState(prev => ({
+        ...prev,
+        modelReady: isExternalReady(aiConfig),
+        modelLoading: false,
+        progress: 1,
+        progressText: '',
+      }))
+      return Promise.resolve(null)
+    }
+
     const handleProgress = report => {
       setState(prev => ({
         ...prev,
@@ -152,7 +171,7 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
       onProgress?.(report)
     }
 
-    return warmLocalEngine(handleProgress)
+    return warmLocalEngine(handleProgress, aiConfig?.localModelId)
       .then(engine => {
         setState(prev => ({
           ...prev,
@@ -167,7 +186,7 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
         setState(prev => ({ ...prev, modelReady: false, modelLoading: false, progress: 0, progressText: '' }))
         throw error
       })
-  }, [])
+  }, [aiConfig])
 
   return {
     ...state,

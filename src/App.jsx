@@ -9,6 +9,7 @@ import AIAssistant from './components/AIAssistant'
 import { IconMap, IconCalendar, IconLocation } from './components/Icons'
 import { useItineraries } from './hooks/useItineraries'
 import { useLocalAgent } from './ai/useLocalAgent'
+import { loadAiConfig, saveAiConfig } from './ai/aiConfig.js'
 import { computeNumberedItems } from './utils/markerNumbers'
 import { getMigratedDomainUrl, getMigrationContext, hasPlanData } from './utils/migration'
 
@@ -61,6 +62,7 @@ export default function App() {
   const [aiFlash, setAiFlash] = useState({ itemId: null, tick: 0 })
   const [aiSearch, setAiSearch] = useState({ query: '', searching: false })
   const [aiChatByPlan, setAiChatByPlan] = useState(() => ({}))
+  const [aiConfig, setAiConfig] = useState(loadAiConfig)
   const aiMessages = Array.isArray(aiChatByPlan[activeId]) ? aiChatByPlan[activeId] : []
   const [panelWidth, setPanelWidth] = useState(() => {
     const saved = localStorage.getItem('panel-width')
@@ -75,6 +77,10 @@ export default function App() {
   const containerRef = useRef(null)
   const activeAiRequestRef = useRef(null)
   const aiActivityGroups = Array.isArray(aiActivityByPlan[activeId]) ? aiActivityByPlan[activeId] : []
+
+  useEffect(() => {
+    saveAiConfig(aiConfig)
+  }, [aiConfig])
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
@@ -194,16 +200,17 @@ export default function App() {
   const localAgent = useLocalAgent({
     onEvent: handleAiEvent,
     onApplyPlan: handleAiApplyPlan,
+    aiConfig,
   })
 
   useEffect(() => {
-    if (!aiOpen || localAgent.isRunning) return
+    if (!aiOpen || localAgent.isRunning || aiConfig.mode !== 'local') return
 
     // 전체 일정 생성과 후속 채팅 모두 로컬 모델을 사용하므로, AI 패널을
     // 연 시점에 모델을 백그라운드에서 준비해 첫 요청의 대기 시간을 줄인다.
     // 실패는 다음 실제 요청에서 기존 오류 안내로 처리한다.
     localAgent.warmUp().catch(() => {})
-  }, [aiOpen, localAgent.isRunning, localAgent.warmUp])
+  }, [aiOpen, aiConfig.mode, aiConfig.localModelId, localAgent.isRunning, localAgent.warmUp])
 
   const handleAiSubmit = useCallback((prompt) => {
     const planId = activeId
@@ -237,6 +244,7 @@ export default function App() {
       currentPlan: { title, items },
       conversationHistory: aiMessages,
       isLocked,
+      aiConfig,
     }).then(result => {
       if (!result) return
       const message = result.action?.message
@@ -252,7 +260,7 @@ export default function App() {
       })
       if (activeAiRequestRef.current?.requestId === requestId) activeAiRequestRef.current = null
     })
-  }, [activeId, aiMessages, appendAiMessage, handleAiEvent, isLocked, items, localAgent.run, title, updateAiActivityGroup])
+  }, [activeId, aiConfig, aiMessages, appendAiMessage, handleAiEvent, isLocked, items, localAgent.run, title, updateAiActivityGroup])
 
   const activeAiItem = useMemo(
     () => items.find(item => item.id === aiActiveItemId) || null,
@@ -437,8 +445,12 @@ export default function App() {
         messages={aiMessages}
         activeItem={activeAiItem}
         error={localAgent.error}
-        modelReady={localAgent.modelReady}
-        modelLoading={localAgent.modelLoading}
+        modelReady={aiConfig.mode === 'api'
+          ? Boolean(aiConfig.external?.connected && aiConfig.external?.modelId)
+          : localAgent.modelReady}
+        modelLoading={aiConfig.mode === 'local' && localAgent.modelLoading}
+        aiConfig={aiConfig}
+        onAiConfigChange={setAiConfig}
         isMobile={isMobile}
       />
 

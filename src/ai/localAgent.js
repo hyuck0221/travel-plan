@@ -1,11 +1,15 @@
 import { getSearchTimeoutMessage, isSearchTimeoutError, searchPlaces } from './mcpClient.js'
+import { createDefaultAiConfig, LOCAL_MODEL_FALLBACK_ID, LOCAL_MODEL_FALLBACK_LABEL, LOCAL_MODEL_ID, LOCAL_MODEL_LABEL } from './aiConfig.js'
+import { createExternalEngine } from './externalProvider.js'
 
-// 브라우저에서 반복 대화가 빠르게 이어지도록 기본 모델은 3B로 둔다.
-// 메모리가 더 작은 WebGPU 환경에서는 1.7B 모델로 한 번만 내려간다.
-export const LOCAL_MODEL_ID = 'Qwen2.5-3B-Instruct-q4f16_1-MLC'
-export const LOCAL_MODEL_LABEL = 'Qwen 2.5 3B'
-export const LOCAL_MODEL_FALLBACK_ID = 'Qwen3-1.7B-q4f16_1-MLC'
-export const LOCAL_MODEL_FALLBACK_LABEL = 'Qwen 3 1.7B'
+export {
+  createDefaultAiConfig,
+  LOCAL_MODEL_FALLBACK_ID,
+  LOCAL_MODEL_FALLBACK_LABEL,
+  LOCAL_MODEL_ID,
+  LOCAL_MODEL_LABEL,
+  LOCAL_MODEL_OPTIONS,
+} from './aiConfig.js'
 
 let enginePromise = null
 let engineInstance = null
@@ -14,6 +18,8 @@ let worker = null
 let progressListener = null
 let engineReady = false
 let activeModelId = LOCAL_MODEL_ID
+let loadingModelId = ''
+let loadedModelPreferenceId = ''
 
 const MUTATION_SCHEMA = {
   type: 'object',
@@ -182,22 +188,28 @@ export function isLocalEngineReady() {
  * 전체 일정 생성도 모델을 사용하므로, AI 패널을 연 시점에 모델 Promise를
  * 미리 만들어 첫 요청이 별도의 로딩을 기다리지 않도록 한다.
  */
-export function warmLocalEngine(onProgress) {
-  if (engineReady && engineInstance) return Promise.resolve(engineInstance)
-  return getLocalEngine(onProgress)
+export function warmLocalEngine(onProgress, modelId = LOCAL_MODEL_ID) {
+  if (engineReady && engineInstance && loadedModelPreferenceId === modelId) return Promise.resolve(engineInstance)
+  return getLocalEngine(onProgress, modelId)
 }
 
-export async function getLocalEngine(onProgress) {
+export async function getLocalEngine(onProgress, requestedModelId = LOCAL_MODEL_ID) {
   if (!globalThis.navigator?.gpu) {
     throw new Error('이 브라우저는 WebGPU를 지원하지 않아 로컬 AI를 실행할 수 없습니다.')
   }
 
+  const modelId = String(requestedModelId || LOCAL_MODEL_ID)
   progressListener = onProgress
-  if (engineReady && engineInstance) return engineInstance
-  if (enginePromise) return enginePromise
+  if (engineReady && engineInstance && loadedModelPreferenceId === modelId) return engineInstance
+  if (engineReady && engineInstance && loadedModelPreferenceId !== modelId) await unloadLocalEngine()
+  if (enginePromise) {
+    if (loadingModelId === modelId) return enginePromise
+    cancelLocalEngineLoad()
+  }
 
   const loadToken = { cancelled: false, reject: null, promise: null }
   engineLoadToken = loadToken
+  loadingModelId = modelId
   const loadPromise = (async () => {
     const { CreateWebWorkerMLCEngine } = await import('@mlc-ai/web-llm')
     if (loadToken.cancelled) throw createAbortError()
@@ -210,10 +222,12 @@ export async function getLocalEngine(onProgress) {
     }
 
     try {
-      activeModelId = LOCAL_MODEL_ID
-      return await loadModel(LOCAL_MODEL_ID)
+      activeModelId = modelId
+      return await loadModel(modelId)
     } catch (primaryError) {
       if (loadToken.cancelled) throw createAbortError()
+
+      if (modelId === LOCAL_MODEL_FALLBACK_ID) throw primaryError
 
       // Qwen 2.5 3B가 WebGPU 메모리 한도를 넘는 기기에서는 이미 실패한
       // 워커를 재사용하지 않고, 브라우저용 초경량 모델로 한 번만 전환한다.
@@ -240,6 +254,7 @@ export async function getLocalEngine(onProgress) {
     if (loadToken.cancelled) throw createAbortError()
     engineInstance = engine
     engineReady = true
+    loadedModelPreferenceId = modelId
     return engine
   } catch (error) {
     if (enginePromise === pendingPromise) {
@@ -247,6 +262,8 @@ export async function getLocalEngine(onProgress) {
       engineInstance = null
       enginePromise = null
       engineLoadToken = null
+      loadingModelId = ''
+      loadedModelPreferenceId = ''
       worker?.terminate()
       worker = null
     }
@@ -267,6 +284,8 @@ export function cancelLocalEngineLoad() {
   engineInstance = null
   enginePromise = null
   engineLoadToken = null
+  loadingModelId = ''
+  loadedModelPreferenceId = ''
   progressListener = null
   activeModelId = LOCAL_MODEL_ID
 }
@@ -1845,7 +1864,7 @@ async function searchForAnswer(prompt, currentItems, signal, onEvent) {
   }
 }
 
-export async function runLocalAgent({ prompt, currentPlan, conversationHistory = [], signal, onEvent, onApplyPlan, onProgress, isLocked = false }) {
+export async function runLocalAgent({ prompt, currentPlan, conversationHistory = [], signal, onEvent, onApplyPlan, onProgress, isLocked = false, aiConfig = createDefaultAiConfig() }) {
   const cleanPrompt = safeString(prompt, 1200)
   if (!cleanPrompt) throw new Error('AI에게 시킬 작업을 입력해주세요.')
   throwIfAborted(signal)
@@ -1891,7 +1910,9 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
     }
   }
 
-  const engine = await getLocalEngine(onProgress)
+  const engine = aiConfig?.mode === 'api'
+    ? createExternalEngine(aiConfig.external, signal)
+    : await getLocalEngine(onProgress, aiConfig?.localModelId || LOCAL_MODEL_ID)
   throwIfAborted(signal)
   onEvent?.({ type: 'stage', key: 'model-ready', label: '질문을 분석하는 중' })
 
@@ -2261,6 +2282,8 @@ export async function unloadLocalEngine() {
   worker = null
   enginePromise = null
   engineLoadToken = null
+  loadingModelId = ''
+  loadedModelPreferenceId = ''
   progressListener = null
   activeModelId = LOCAL_MODEL_ID
 }

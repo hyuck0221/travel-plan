@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { IconCheck, IconClose, IconLoader, IconSparkle } from './Icons'
+import { IconCheck, IconChevronLeft, IconClose, IconLoader, IconSettings, IconSparkle } from './Icons'
+import AISettings from './AISettings'
 
 const SUGGESTIONS = [
   { label: '새 여행 만들기', prompt: '서울 2박 3일 여행 일정을 처음부터 만들어줘. 하루 3곳 정도로 여유 있게 구성해줘.' },
@@ -165,11 +166,14 @@ export default function AIAssistant({
   error = '',
   modelReady = false,
   modelLoading = false,
+  aiConfig,
+  onAiConfigChange,
   isMobile = false,
 }) {
   const [draft, setDraft] = useState('')
   const [panelGeometry, setPanelGeometry] = useState(getInitialPanelGeometry)
   const [isInteracting, setIsInteracting] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const inputRef = useRef(null)
   const contentEndRef = useRef(null)
   const interactionRef = useRef(null)
@@ -214,6 +218,10 @@ export default function AIAssistant({
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())
+  }, [open])
+
+  useEffect(() => {
+    if (!open) setSettingsOpen(false)
   }, [open])
 
   useEffect(() => {
@@ -325,6 +333,11 @@ export default function AIAssistant({
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
+  const handleSettingsApply = (nextConfig) => {
+    onAiConfigChange?.(nextConfig)
+    setSettingsOpen(false)
+  }
+
   const panelStyle = !isMobile ? {
     left: panelGeometry.left + 'px',
     top: panelGeometry.top + 'px',
@@ -349,80 +362,119 @@ export default function AIAssistant({
     >
       <div className="ai-assistant-header" onPointerDown={handleDragStart}>
         <div className="ai-assistant-brand">
-          <span className={'ai-assistant-orb' + (isRunning ? ' ai-assistant-orb--running' : '')}>
-            <IconSparkle size={17} />
-          </span>
-          <div>
-            <strong>Travelink AI</strong>
-            <span className={`ai-assistant-status ai-assistant-status--${status || 'idle'}`} role="status" aria-live="polite">
-              {modelStatusCopy(status, modelReady, modelLoading)}
+          {settingsOpen ? (
+            <button
+              type="button"
+              className="ai-settings-back"
+              onPointerDown={event => event.stopPropagation()}
+              onClick={() => setSettingsOpen(false)}
+              aria-label="채팅으로 돌아가기"
+              title="채팅으로 돌아가기"
+            >
+              <IconChevronLeft size={18} />
+            </button>
+          ) : (
+            <span className={'ai-assistant-orb' + (isRunning ? ' ai-assistant-orb--running' : '')}>
+              <IconSparkle size={17} />
             </span>
+          )}
+          <div>
+            <strong>{settingsOpen ? 'AI 설정' : 'Travelink AI'}</strong>
+            {!settingsOpen && (
+              <span className={`ai-assistant-status ai-assistant-status--${status || 'idle'}`} role="status" aria-live="polite">
+                {modelStatusCopy(status, modelReady, modelLoading)}
+              </span>
+            )}
           </div>
         </div>
-        <button className="ai-close-btn" onPointerDown={event => event.stopPropagation()} onClick={onClose} aria-label="Travelink AI 닫기">
-          <IconClose size={17} />
-        </button>
+        <div className="ai-assistant-header-actions">
+          {!settingsOpen && (
+            <button
+              type="button"
+              className="ai-settings-btn"
+              onPointerDown={event => event.stopPropagation()}
+              onClick={() => setSettingsOpen(true)}
+              disabled={isRunning}
+              aria-label="AI 모델 설정"
+              title="AI 모델 설정"
+            >
+              <IconSettings size={20} />
+            </button>
+          )}
+          <button className="ai-close-btn" onPointerDown={event => event.stopPropagation()} onClick={onClose} aria-label="Travelink AI 닫기">
+            <IconClose size={17} />
+          </button>
+        </div>
       </div>
 
       <div className="ai-assistant-body">
-        {messages.length > 0 && (
-          <div className="ai-chat-history" aria-label="AI 대화 이력">
-            {messages.map(message => {
-              const activityGroup = activityGroupByMessageId.get(message.id)
-              return (
-                <Fragment key={message.id}>
-                  <div className={'ai-chat-message ai-chat-message--' + (message.role === 'user' ? 'user' : 'assistant')}>
-                    <div className={'ai-chat-bubble' + (message.tone === 'error' ? ' ai-chat-bubble--error' : '')}>
-                      {message.content}
-                    </div>
-                  </div>
-                  {activityGroup && (
-                    <ActivityThread group={activityGroup} onToggle={onToggleActivityGroup} />
-                  )}
-                </Fragment>
-              )
-            })}
-          </div>
-        )}
-
-        {isThinking && (
-          <ThinkingBubble
-            status={status}
-            taskText={currentTask}
-            activeItem={status === 'applying' ? activeItem : null}
+        {settingsOpen ? (
+          <AISettings
+            config={aiConfig}
+            onApply={handleSettingsApply}
           />
-        )}
+        ) : (
+          <>
+            {messages.length > 0 && (
+              <div className="ai-chat-history" aria-label="AI 대화 이력">
+                {messages.map(message => {
+                  const activityGroup = activityGroupByMessageId.get(message.id)
+                  return (
+                    <Fragment key={message.id}>
+                      <div className={'ai-chat-message ai-chat-message--' + (message.role === 'user' ? 'user' : 'assistant')}>
+                        <div className={'ai-chat-bubble' + (message.tone === 'error' ? ' ai-chat-bubble--error' : '')}>
+                          {message.content}
+                        </div>
+                      </div>
+                      {activityGroup && (
+                        <ActivityThread group={activityGroup} onToggle={onToggleActivityGroup} />
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </div>
+            )}
 
-        <div ref={contentEndRef} />
+            {isThinking && (
+              <ThinkingBubble
+                status={status}
+                taskText={currentTask}
+                activeItem={status === 'applying' ? activeItem : null}
+              />
+            )}
 
-        {status === 'idle' && activityGroups.length === 0 && messages.length === 0 && (
-          <div className="ai-assistant-intro">
-            <div className="ai-intro-icon"><IconSparkle size={20} /></div>
-            <strong>무엇을 도와드릴까요?</strong>
-            <p>일정을 바로 수정하거나, 지금 구성된 일정에 대해 궁금한 점을 물어보세요.</p>
-          </div>
-        )}
+            <div ref={contentEndRef} />
 
-        {error && <div className="ai-error-message" role="alert">{error}</div>}
+            {status === 'idle' && activityGroups.length === 0 && messages.length === 0 && (
+              <div className="ai-assistant-intro">
+                <div className="ai-intro-icon"><IconSparkle size={20} /></div>
+                <strong>무엇을 도와드릴까요?</strong>
+                <p>일정을 바로 수정하거나, 지금 구성된 일정에 대해 궁금한 점을 물어보세요.</p>
+              </div>
+            )}
 
-        {status === 'idle' && activityGroups.length === 0 && messages.length === 0 && (
-          <div className="ai-suggestion-list">
-            {SUGGESTIONS.map(suggestion => (
-              <button
-                key={suggestion.label}
-                className="ai-suggestion"
-                type="button"
-                onClick={() => handleSuggestion(suggestion.prompt)}
-              >
-                <span>{suggestion.label}</span>
-                <span aria-hidden="true">›</span>
-              </button>
-            ))}
-          </div>
+            {error && <div className="ai-error-message" role="alert">{error}</div>}
+
+            {status === 'idle' && activityGroups.length === 0 && messages.length === 0 && (
+              <div className="ai-suggestion-list">
+                {SUGGESTIONS.map(suggestion => (
+                  <button
+                    key={suggestion.label}
+                    className="ai-suggestion"
+                    type="button"
+                    onClick={() => handleSuggestion(suggestion.prompt)}
+                  >
+                    <span>{suggestion.label}</span>
+                    <span aria-hidden="true">›</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      <form className="ai-assistant-composer" data-ai-composer="true" onSubmit={handleSubmit}>
+      {!settingsOpen && <form className="ai-assistant-composer" data-ai-composer="true" onSubmit={handleSubmit}>
         <label className="sr-only" htmlFor="ai-itinerary-prompt">AI에게 보낼 메시지</label>
         <div className="ai-composer-row">
           <textarea
@@ -456,7 +508,7 @@ export default function AIAssistant({
             )}
           </div>
         </div>
-      </form>
+      </form>}
 
       {!isMobile && RESIZE_DIRECTIONS.map(direction => (
         <span

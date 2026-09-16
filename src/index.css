@@ -2365,6 +2365,48 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   color: var(--color-text);
 }
 
+.ai-assistant-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ai-settings-btn,
+.ai-settings-back {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  border-radius: 8px;
+  transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out), transform var(--dur-instant) var(--ease-out);
+}
+
+.ai-settings-btn:hover,
+.ai-settings-back:hover {
+  color: #5b21b6;
+  background: #f3f0ff;
+}
+
+.ai-settings-btn:active,
+.ai-settings-back:active {
+  transform: translateY(1px);
+}
+
+.ai-settings-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ai-settings-back {
+  color: #6d28d9;
+  background: #f3f0ff;
+  border: 1px solid #ddd6fe;
+}
+
 .ai-assistant-status {
   display: block;
   max-width: 100%;
@@ -2503,6 +2545,377 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   color: #991b1b;
   background: #fef2f2;
   border-color: #fecaca;
+}
+
+.ai-settings-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 100%;
+  animation: aiSettingsIn 180ms var(--ease-out);
+}
+
+@keyframes aiSettingsIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ai-settings-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  background: #f4f3fb;
+  border: 1px solid #e5e2f2;
+  border-radius: 11px;
+  flex-shrink: 0;
+}
+
+.ai-settings-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 8px;
+  color: var(--color-text-secondary);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out);
+}
+
+.ai-settings-mode-btn:hover {
+  color: #5b21b6;
+}
+
+.ai-settings-mode-btn--active {
+  color: #5b21b6;
+  background: white;
+  box-shadow: 0 2px 7px rgba(79, 70, 229, 0.12);
+}
+
+.ai-settings-section,
+.ai-settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ai-settings-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ai-settings-model-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 9px;
+  color: var(--color-text);
+  background: #fbfcff;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  text-align: left;
+  transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out);
+}
+
+.ai-settings-model-option:hover {
+  background: #f8f6ff;
+  border-color: #c4b5fd;
+}
+
+.ai-settings-model-option--selected {
+  background: #f7f4ff;
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.12);
+}
+
+.ai-settings-model-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #6d28d9;
+  background: #ede9fe;
+  border-radius: 8px;
+}
+
+.ai-settings-model-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-settings-model-badge {
+  margin-left: auto;
+  padding: 3px 6px;
+  color: #6366f1;
+  background: #eef2ff;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ai-settings-model-check {
+  width: 17px;
+  height: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: transparent;
+  border: 1.5px solid #c7d2fe;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.ai-settings-model-option--selected .ai-settings-model-check {
+  color: white;
+  background: #6366f1;
+  border-color: #6366f1;
+}
+
+.ai-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding: 22px 1px 1px;
+}
+
+.ai-provider-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1;
+  color: #64748b;
+  background: #fbfcff;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  transition: color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out), transform var(--dur-instant) var(--ease-out);
+}
+
+.ai-provider-option:hover {
+  color: #5b21b6;
+  background: #f8f6ff;
+  border-color: #c4b5fd;
+  transform: translateY(-1px);
+}
+
+.ai-provider-option--selected {
+  color: #6d28d9;
+  background: #f3f0ff;
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.12);
+}
+
+/* 브랜드 심볼은 각 서비스의 대표 색상을 유지해 식별성을 높인다. */
+.ai-provider-option--openai { color: #111827; }
+.ai-provider-option--anthropic { color: #c9684b; }
+.ai-provider-option--gemini { color: #4285f4; }
+.ai-provider-option--grok { color: #111827; }
+.ai-provider-option--nvidia { color: #76b900; }
+.ai-provider-option--custom { color: #6d28d9; }
+
+.ai-provider-option::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 3;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  padding: 4px 7px;
+  color: white;
+  background: #1e1b4b;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out);
+}
+
+.ai-provider-option::before {
+  content: '';
+  position: absolute;
+  z-index: 3;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  border: 4px solid transparent;
+  border-top-color: #1e1b4b;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out);
+}
+
+.ai-provider-option:hover::after,
+.ai-provider-option:hover::before,
+.ai-provider-option:focus-visible::after,
+.ai-provider-option:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.ai-settings-provider-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.ai-settings-provider-title > span {
+  width: 25px;
+  height: 25px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6d28d9;
+  background: #ede9fe;
+  border-radius: 7px;
+}
+
+.ai-settings-provider-title--openai > span { color: #111827; background: #f3f4f6; }
+.ai-settings-provider-title--anthropic > span { color: #c9684b; background: #fff1eb; }
+.ai-settings-provider-title--gemini > span { color: #4285f4; background: #eff6ff; }
+.ai-settings-provider-title--grok > span { color: #111827; background: #f3f4f6; }
+.ai-settings-provider-title--nvidia > span { color: #76b900; background: #f1f8e8; }
+.ai-settings-provider-title--custom > span { color: #6d28d9; background: #ede9fe; }
+
+.ai-settings-provider-title strong {
+  font-weight: 750;
+}
+
+.ai-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ai-settings-field input,
+.ai-settings-field textarea,
+.ai-settings-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  color: var(--color-text);
+  background: #fbfcff;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  outline: none;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  transition: border-color var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out);
+}
+
+.ai-settings-field textarea {
+  min-height: 64px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.ai-settings-field input:focus,
+.ai-settings-field textarea:focus,
+.ai-settings-field select:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.16);
+}
+
+.ai-settings-field input::placeholder,
+.ai-settings-field textarea::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.ai-settings-connect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-settings-key-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #6366f1;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ai-settings-key-link:hover {
+  color: #4338ca;
+  text-decoration: underline;
+}
+
+.ai-settings-connect,
+.ai-settings-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 7px 14px;
+  color: white;
+  background: #6366f1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 750;
+  transition: background-color var(--dur-short) var(--ease-out), opacity var(--dur-short) var(--ease-out), transform var(--dur-instant) var(--ease-out);
+}
+
+.ai-settings-connect:hover:not(:disabled),
+.ai-settings-confirm:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+.ai-settings-connect:active:not(:disabled),
+.ai-settings-confirm:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ai-settings-connect:disabled,
+.ai-settings-confirm:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.ai-settings-confirm {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.ai-settings-error {
+  margin-top: 1px;
+  padding: 8px 9px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .ai-thinking-row {
@@ -3039,11 +3452,13 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   .ai-assistant-header { padding: 13px 14px 11px; }
   .ai-assistant-body { padding: 12px; }
   .ai-assistant-composer { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); }
+  .ai-provider-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ai-trigger--running svg,
   .ai-assistant,
+  .ai-settings-view,
   .ai-live-dot,
   .ai-focus-pulse,
   .ai-thinking-row,
