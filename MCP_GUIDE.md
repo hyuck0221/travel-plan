@@ -13,6 +13,8 @@ Model Context Protocol(MCP)을 사용하면 AI 에이전트(Claude 등)가 직�
 
 웹페이지의 **AI 일정 편집**은 브라우저에서 로컬 모델로 실행됩니다. 화면 안의 AI는 장소 좌표가 필요할 때만 `search_places`를 사용하고, 일정 링크를 만드는 `create_link`는 호출하지 않습니다. AI가 반영한 일정은 기존 공유 버튼으로 사용자가 직접 공유할 수 있습니다.
 
+브라우저의 로컬 AI는 외부 MCP와 별도로 다음 단계의 로컬 도구 계층을 사용합니다. 먼저 요청을 `answer`(답변만)와 `control`(일정 제어)로 분류하고, 제어 요청에만 도구를 선택합니다. `load_plan`은 기존 일정이 필요한 경우에만 실행되며, 이후 `add_schedule`, `update_schedule`, `delete_schedule`, `replace_schedule` 중 하나가 카드 변경을 수행합니다. 장소 검색은 `search_places`로 분리되어 지도 검색 결과를 일정 반영 또는 답변에 전달합니다.
+
 ---
 
 ## 3. 제공 도구 (Tools) 상세

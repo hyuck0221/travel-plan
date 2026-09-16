@@ -5,7 +5,14 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
   const activeRunRef = useRef(null)
   const onEventRef = useRef(onEvent)
   const onApplyPlanRef = useRef(onApplyPlan)
-  const [state, setState] = useState({ status: 'idle', progress: 0, error: '', progressText: '' })
+  const [state, setState] = useState({
+    status: 'idle',
+    progress: 0,
+    error: '',
+    progressText: '',
+    modelReady: isLocalEngineReady(),
+    modelLoading: false,
+  })
 
   useEffect(() => { onEventRef.current = onEvent }, [onEvent])
   useEffect(() => { onApplyPlanRef.current = onApplyPlan }, [onApplyPlan])
@@ -13,7 +20,15 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
   const reportCancellation = (runContext) => {
     if (runContext.cancellationEventSent) return
     runContext.cancellationEventSent = true
-    setState({ status: 'cancelled', progress: 0, error: '', progressText: '' })
+    setState(prev => ({
+      ...prev,
+      status: 'cancelled',
+      progress: 0,
+      error: '',
+      progressText: '',
+      modelReady: isLocalEngineReady(),
+      modelLoading: false,
+    }))
     onEventRef.current?.({ type: 'cancelled', label: '작업을 중단했습니다.' })
   }
 
@@ -35,6 +50,8 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
       progress: engineReady ? 1 : 0,
       error: '',
       progressText: '',
+      modelReady: engineReady,
+      modelLoading: !engineReady,
     })
 
     try {
@@ -48,6 +65,16 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
           if (!isCurrentRun()) return
           if (event.type === 'stage' && event.key === 'apply') {
             setState(prev => ({ ...prev, status: 'applying' }))
+          }
+          if (event.type === 'stage' && ['model-ready', 'route'].includes(event.key)) {
+            setState(prev => ({
+              ...prev,
+              status: prev.status === 'loading' ? 'working' : prev.status,
+              modelReady: true,
+              modelLoading: false,
+              progress: 1,
+              progressText: '',
+            }))
           }
           onEventRef.current?.(event)
         },
@@ -71,6 +98,8 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
         progress: 1,
         error: '',
         progressText: '',
+        modelReady: true,
+        modelLoading: false,
       })
       return result
     } catch (error) {
@@ -79,7 +108,14 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
         return null
       }
       if (!isCurrentRun()) return null
-      setState({ status: 'error', progress: 0, error: error.message || 'AI 작업을 완료하지 못했습니다.', progressText: '' })
+      setState({
+        status: 'error',
+        progress: 0,
+        error: error.message || 'AI 작업을 완료하지 못했습니다.',
+        progressText: '',
+        modelReady: isLocalEngineReady(),
+        modelLoading: false,
+      })
       onEventRef.current?.({ type: 'error', label: error.message || 'AI 작업을 완료하지 못했습니다.' })
       return null
     } finally {
@@ -104,7 +140,34 @@ export function useLocalAgent({ onEvent, onApplyPlan }) {
     activeRunRef.current = null
   }, [])
 
-  const warmUp = useCallback((onProgress) => warmLocalEngine(onProgress), [])
+  const warmUp = useCallback((onProgress) => {
+    const handleProgress = report => {
+      setState(prev => ({
+        ...prev,
+        modelReady: false,
+        modelLoading: true,
+        progress: Math.max(0, Math.min(1, Number(report?.progress) || 0)),
+        progressText: report?.text || '',
+      }))
+      onProgress?.(report)
+    }
+
+    return warmLocalEngine(handleProgress)
+      .then(engine => {
+        setState(prev => ({
+          ...prev,
+          modelReady: true,
+          modelLoading: false,
+          progress: 1,
+          progressText: '',
+        }))
+        return engine
+      })
+      .catch(error => {
+        setState(prev => ({ ...prev, modelReady: false, modelLoading: false, progress: 0, progressText: '' }))
+        throw error
+      })
+  }, [])
 
   return {
     ...state,

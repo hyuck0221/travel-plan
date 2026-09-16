@@ -5,17 +5,148 @@ import {
   applyExplicitDestinationEdits,
   applyExplicitDestinationRequests,
   applyExplicitEdits,
+  applyMutationCommand,
   applyPlanOperation,
+  answerScheduleQuestion,
   buildPlanOperations,
-  buildTripBlueprint,
   compactConversationHistory,
+  executeScheduleTool,
   isScheduleMutationRequest,
   parseAgentAction,
+  parseControlDecision,
+  parseRouteDecision,
   parseTripRequest,
   runLocalAgent,
   sanitizeSearchQuery,
   validateTripPlan,
+  LOCAL_MODEL_FALLBACK_ID,
+  LOCAL_MODEL_ID,
 } from './localAgent.js'
+
+test('uses the lighter browser model by default and a smaller fallback', () => {
+  assert.equal(LOCAL_MODEL_ID, 'Qwen2.5-3B-Instruct-q4f16_1-MLC')
+  assert.equal(LOCAL_MODEL_FALLBACK_ID, 'Qwen3-1.7B-q4f16_1-MLC')
+})
+
+test('parses the first-stage answer or control route', () => {
+  assert.deepEqual(parseRouteDecision('{"route":"answer"}'), { route: 'answer' })
+  assert.deepEqual(parseRouteDecision('<think>분류</think>{"route":"control"}'), { route: 'control' })
+})
+
+test('parses a separated schedule tool decision', () => {
+  assert.deepEqual(parseControlDecision('{"tool":"update_schedule","needsPlan":true,"query":""}'), {
+    tool: 'update_schedule',
+    needsPlan: true,
+    query: '',
+  })
+  assert.deepEqual(parseControlDecision('{"tool":"add","needsPlan":false,"query":""}'), {
+    tool: 'add_schedule',
+    needsPlan: false,
+    query: '',
+  })
+})
+
+test('executes add, update, delete, and load as separate browser tools', async () => {
+  const currentPlan = {
+    title: '서울 여행',
+    items: [
+      { id: 'place-1', destination: '경복궁', date: '2026-09-15', time: '10:00', memo: '입장' },
+      { id: 'place-2', destination: '성수동', date: '2026-09-15', time: '15:00', memo: '' },
+    ],
+  }
+
+  const loaded = await executeScheduleTool('load_plan', null, { currentPlan })
+  assert.equal(loaded.plan.items.length, 2)
+
+  const added = await executeScheduleTool('add_schedule', {
+    intent: 'add',
+    operations: [{ action: 'add', destination: '서울숲', date: '2026-09-15', time: '18:00' }],
+  }, { currentPlan, prompt: '서울숲을 일정에 추가해줘.' })
+  assert.equal(added.items.length, 3)
+  assert.equal(added.items.at(-1).destination, '서울숲')
+
+  const updated = await executeScheduleTool('update_schedule', {
+    intent: 'update',
+    operations: [{ action: 'update', target: '경복궁', time: '11:00' }],
+  }, { currentPlan, prompt: '경복궁 시간을 바꿔줘.' })
+  assert.equal(updated.items[0].time, '11:00')
+  assert.equal(updated.items[1].destination, '성수동')
+
+  const deleted = await executeScheduleTool('delete_schedule', {
+    intent: 'delete',
+    operations: [{ action: 'delete', target: '성수동' }],
+  }, { currentPlan, prompt: '성수동을 삭제해줘.' })
+  assert.deepEqual(deleted.items.map(item => item.destination), ['경복궁'])
+})
+
+test('parses a compact mutation command without requiring the entire itinerary', () => {
+  const action = parseAgentAction(JSON.stringify({
+    intent: 'update',
+    message: '경복궁 시간을 변경했습니다.',
+    query: '',
+    operations: [{ action: 'update', target: '경복궁', time: '11:00' }],
+  }))
+
+  assert.equal(action.mode, 'apply')
+  assert.equal(action.intent, 'update')
+  assert.equal(action.operations[0].target, '경복궁')
+  assert.equal(action.operations[0].time, '11:00')
+  assert.deepEqual(action.items, [])
+})
+
+test('applies only the requested card fields from a compact mutation command', () => {
+  const currentItems = [
+    { id: 'place-1', destination: '경복궁', date: '2026-09-15', time: '10:00', memo: '입장', lat: 37.58, lng: 126.97 },
+    { id: 'place-2', destination: '남산서울타워', date: '2026-09-15', time: '15:00', memo: '전망', lat: 37.55, lng: 126.98 },
+  ]
+  const result = applyMutationCommand({
+    intent: 'update',
+    operations: [{ action: 'update', target: '경복궁', time: '11:00' }],
+  }, currentItems, '경복궁 시간을 11시로 바꿔줘.')
+
+  assert.equal(result.changed, true)
+  assert.equal(result.items[0].time, '11:00')
+  assert.equal(result.items[0].memo, '입장')
+  assert.equal(result.items[0].lat, 37.58)
+  assert.equal(result.items[1].time, '15:00')
+})
+
+test('replaces an existing plan with only AI-selected add operations for a full trip', () => {
+  const result = applyMutationCommand({
+    intent: 'replace',
+    operations: [
+      { action: 'add', target: 'AI가 선택한 첫 방문지', date: '2026-09-15', time: '09:30', memo: '오전 일정' },
+      { action: 'add', destination: 'AI가 선택한 둘째 방문지', date: '2026-09-16', time: '13:00', memo: '오후 일정' },
+    ],
+  }, [
+    { id: 'old-1', destination: '기존 장소', date: '2026-09-15', time: '10:00' },
+  ], '리옹 1박 2일 일정을 처음부터 만들어줘.', { replaceAll: true })
+
+  assert.deepEqual(result.items.map(item => item.destination), [
+    'AI가 선택한 첫 방문지',
+    'AI가 선택한 둘째 방문지',
+  ])
+  assert.equal(result.items.some(item => item.destination === '기존 장소'), false)
+  assert.equal(result.items[0].memo, '오전 일정')
+})
+
+test('answers confident schedule questions from browser state without model prose', () => {
+  const answer = answerScheduleQuestion('현재 일정 요약해줘.', {
+    title: '서울 여행',
+    items: [
+      { destination: '경복궁', date: '2026-09-15', time: '10:00' },
+      { destination: '성수동', date: '2026-09-16', time: '15:00' },
+    ],
+  })
+
+  assert.match(answer, /총 2개/)
+  assert.match(answer, /경복궁/)
+  assert.match(answer, /성수동/)
+})
+
+test('does not treat a general travel question as an empty-plan answer', () => {
+  assert.equal(answerScheduleQuestion('서울은 언제 여행하기 좋아?', { title: '', items: [] }), null)
+})
 
 test('parses fenced local-model JSON', () => {
   const fence = String.fromCharCode(96)
@@ -154,27 +285,22 @@ test('recognizes an explicit destination replacement', () => {
   assert.equal(result[0].lng, null)
 })
 
-test('creates a deterministic three-day blueprint for a full-trip request', () => {
-  const request = parseTripRequest('서울 2박 3일 일정 짜줘.', new Date(2026, 8, 15))
+test('extracts only trip metadata without using a destination library', () => {
+  const request = parseTripRequest('리옹 2박 3일 일정 짜줘.', new Date(2026, 8, 15))
   assert.deepEqual(request, {
-    destination: '서울',
-    destinationKey: '서울',
+    destination: '리옹',
     nights: 2,
     days: 3,
     slotsPerDay: 3,
     startDate: '2026-09-15',
   })
 
-  const blueprint = buildTripBlueprint(request)
-  assert.equal(blueprint.length, 9)
-  assert.deepEqual([...new Set(blueprint.map(item => item.date))], [
-    '2026-09-15',
-    '2026-09-16',
-    '2026-09-17',
-  ])
-  assert.deepEqual(blueprint.slice(0, 3).map(item => item.time), ['10:00', '13:00', '17:00'])
-  assert.equal(validateTripPlan(blueprint, request).valid, true)
-  assert.equal(new Set(blueprint.map(item => item.destination)).size, 9)
+  const aiItems = Array.from({ length: 9 }, (_, index) => ({
+    destination: 'AI가 선택한 장소 ' + index,
+    date: `2026-09-${String(15 + Math.floor(index / 3)).padStart(2, '0')}`,
+    time: ['09:30', '13:00', '17:30'][index % 3],
+  }))
+  assert.equal(validateTripPlan(aiItems, request).valid, true)
 })
 
 test('rejects a tiny model result that collapses a three-day trip into one card', () => {
@@ -208,6 +334,7 @@ test('distinguishes chat questions from explicit schedule changes', () => {
   assert.equal(isScheduleMutationRequest('경복궁을 삭제해도 돼?'), false)
   assert.equal(isScheduleMutationRequest('현재 일정 요약해줘.'), false)
   assert.equal(isScheduleMutationRequest('성수동 일정을 하나 추가해줘.'), true)
+  assert.equal(isScheduleMutationRequest('성수동 일정을 조금 더 늘려줄래?'), true)
   assert.equal(isScheduleMutationRequest('경복궁 시간을 11시로 바꿔줘.'), true)
   assert.equal(isScheduleMutationRequest('서울 2박 3일 일정 짜줘.'), true)
   assert.equal(isScheduleMutationRequest('서울 2박 3일 일정 알려줘.'), false)

@@ -2505,6 +2505,93 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   border-color: #fecaca;
 }
 
+.ai-thinking-row {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  margin: 2px 0 14px;
+  animation: aiThinkingIn 220ms var(--ease-out);
+}
+
+.ai-thinking-bubble {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  width: min(100%, 340px);
+  min-height: 37px;
+  padding: 7px 10px 7px 8px;
+  color: #4c1d95;
+  background: linear-gradient(135deg, #faf8ff, #f4f7ff);
+  border: 1px solid #ddd6fe;
+  border-radius: 14px 14px 14px 4px;
+  box-shadow: 0 5px 14px rgba(99, 102, 241, 0.08);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ai-thinking-mark {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #6d28d9;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  border-radius: 8px;
+}
+
+.ai-thinking-label {
+  min-width: 0;
+  overflow: hidden;
+  color: #4338ca;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.ai-thinking-dots i {
+  width: 4px;
+  height: 4px;
+  display: block;
+  background: #818cf8;
+  border-radius: 50%;
+  animation: aiThinkingDot 1.1s ease-in-out infinite;
+}
+
+.ai-thinking-dots i:nth-child(2) { animation-delay: 140ms; }
+.ai-thinking-dots i:nth-child(3) { animation-delay: 280ms; }
+
+@keyframes aiThinkingIn {
+  from { opacity: 0; transform: translateY(5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes aiThinkingDot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+.ai-thinking-focus {
+  flex-basis: 100%;
+  margin: 1px 0 0 29px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ai-assistant-intro {
   padding: 22px 10px 14px;
   text-align: center;
@@ -2959,6 +3046,8 @@ input::selection, textarea::selection { background: var(--color-primary); color:
   .ai-assistant,
   .ai-live-dot,
   .ai-focus-pulse,
+  .ai-thinking-row,
+  .ai-thinking-dots i,
   .ai-activity,
   .itinerary-item[data-ai-active="true"] {
     animation: none !important;

@@ -199,8 +199,8 @@ export default function App() {
   useEffect(() => {
     if (!aiOpen || localAgent.isRunning) return
 
-    // 전체 일정 생성은 모델을 건너뛰므로, AI 패널을 연 시점에 모델을
-    // 백그라운드에서 준비해 후속 채팅이 첫 모델 로딩을 기다리지 않게 한다.
+    // 전체 일정 생성과 후속 채팅 모두 로컬 모델을 사용하므로, AI 패널을
+    // 연 시점에 모델을 백그라운드에서 준비해 첫 요청의 대기 시간을 줄인다.
     // 실패는 다음 실제 요청에서 기존 오류 안내로 처리한다.
     localAgent.warmUp().catch(() => {})
   }, [aiOpen, localAgent.isRunning, localAgent.warmUp])
@@ -432,12 +432,13 @@ export default function App() {
         onSubmit={handleAiSubmit}
         onCancel={localAgent.cancel}
         status={localAgent.status}
-        progress={localAgent.progress}
         activityGroups={aiActivityGroups}
         onToggleActivityGroup={handleToggleAiActivityGroup}
         messages={aiMessages}
         activeItem={activeAiItem}
         error={localAgent.error}
+        modelReady={localAgent.modelReady}
+        modelLoading={localAgent.modelLoading}
         isMobile={isMobile}
       />
 

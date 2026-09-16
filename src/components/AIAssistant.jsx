@@ -75,18 +75,34 @@ function resizePanelGeometry(start, direction, deltaX, deltaY) {
   return { left, top, width: right - left, height: bottom - top }
 }
 
-function statusCopy(status, progress) {
-  if (status === 'loading') {
-    if (progress > 0.01) return '로컬 모델 준비 중 ' + Math.round(progress * 100) + '%'
-    return '로컬 모델 준비 중'
-  }
-  if (status === 'working') return 'AI가 요청을 처리하는 중'
-  if (status === 'applying') return '일정을 화면에 적용하는 중'
-  if (status === 'answered') return '답변을 보냈습니다'
-  if (status === 'done') return '일정에 반영했습니다'
-  if (status === 'cancelled') return '작업을 중단했습니다'
-  if (status === 'error') return '작업을 완료하지 못했습니다'
-  return '대기 중'
+function modelStatusCopy(status, modelReady, modelLoading) {
+  if (status === 'working' || status === 'applying') return 'AI 작업 중'
+  if (status === 'loading' || modelLoading) return '모델 준비 중'
+  return modelReady ? '모델 준비됨' : '모델 준비 전'
+}
+
+function thinkingCopy(status, currentTask) {
+  if (currentTask) return currentTask
+  return status === 'applying' ? '일정을 화면에 반영하는 중' : '요청을 분석하는 중'
+}
+
+function ThinkingBubble({ status, taskText, activeItem }) {
+  return (
+    <div className="ai-thinking-row" role="status" aria-live="polite">
+      <div className="ai-thinking-bubble">
+        <span className="ai-thinking-mark" aria-hidden="true"><IconSparkle size={13} /></span>
+        <span className="ai-thinking-label">{thinkingCopy(status, taskText)}</span>
+        <span className="ai-thinking-dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+        {activeItem && (
+          <small className="ai-thinking-focus">{activeItem.destination || '새 일정'} 처리 중</small>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function ActivityThread({ group, onToggle }) {
@@ -142,12 +158,13 @@ export default function AIAssistant({
   onSubmit,
   onCancel,
   status = 'idle',
-  progress = 0,
   activityGroups = [],
   onToggleActivityGroup,
   messages = [],
   activeItem,
   error = '',
+  modelReady = false,
+  modelLoading = false,
   isMobile = false,
 }) {
   const [draft, setDraft] = useState('')
@@ -158,6 +175,10 @@ export default function AIAssistant({
   const interactionRef = useRef(null)
   const submitRef = useRef(null)
   const isRunning = ['loading', 'working', 'applying'].includes(status)
+  const isThinking = status === 'working' || status === 'applying'
+  const activeActivityGroup = [...activityGroups].reverse().find(group => group?.status === 'running')
+  const activities = Array.isArray(activeActivityGroup?.activities) ? activeActivityGroup.activities : []
+  const currentTask = activities[activities.length - 1]?.label || ''
 
   const handleSubmit = (event) => {
     event.preventDefault()
@@ -334,7 +355,7 @@ export default function AIAssistant({
           <div>
             <strong>Travelink AI</strong>
             <span className={`ai-assistant-status ai-assistant-status--${status || 'idle'}`} role="status" aria-live="polite">
-              {statusCopy(status, progress)}
+              {modelStatusCopy(status, modelReady, modelLoading)}
             </span>
           </div>
         </div>
@@ -361,30 +382,18 @@ export default function AIAssistant({
                 </Fragment>
               )
             })}
-            <div ref={contentEndRef} />
           </div>
         )}
 
-        {status === 'applying' && (
-          <div className="ai-progress-card">
-            <div className="ai-progress-copy">
-              <span className="ai-live-dot" />
-              <span>{statusCopy(status, progress)}</span>
-            </div>
-            <div className="ai-progress-track" aria-hidden="true">
-              <span style={{ width: Math.max(progress * 100, 4) + '%' }} />
-            </div>
-            {activeItem && (
-              <div className="ai-focus-card">
-                <span className="ai-focus-pulse" />
-                <div>
-                  <strong>{activeItem.destination || '새 일정'}</strong>
-                  <small>일정 카드와 지도 핀을 함께 확인하는 중</small>
-                </div>
-              </div>
-            )}
-          </div>
+        {isThinking && (
+          <ThinkingBubble
+            status={status}
+            taskText={currentTask}
+            activeItem={status === 'applying' ? activeItem : null}
+          />
         )}
+
+        <div ref={contentEndRef} />
 
         {status === 'idle' && activityGroups.length === 0 && messages.length === 0 && (
           <div className="ai-assistant-intro">
