@@ -1,6 +1,22 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
-import { IconCheck, IconChevronLeft, IconClose, IconLoader, IconSettings, IconSparkle } from './Icons'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { IconApi, IconCheck, IconChevronLeft, IconClose, IconLoader, IconMcp, IconSettings, IconSparkle } from './Icons'
 import AISettings from './AISettings'
+
+const VITE_ENV = import.meta.env || {}
+const DEFAULT_MCP_ENDPOINT = 'https://travelink.hshim.dev/mcp'
+
+function resolveMcpEndpoint() {
+  const configuredEndpoint = String(VITE_ENV.VITE_MCP_ENDPOINT || '').trim()
+  if (configuredEndpoint) return configuredEndpoint
+
+  if (typeof window !== 'undefined') {
+    const { hostname, origin } = window.location
+    const isLocalhost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname)
+    if (origin && !isLocalhost) return `${origin}/mcp`
+  }
+
+  return DEFAULT_MCP_ENDPOINT
+}
 
 const SUGGESTIONS = [
   { label: '새 여행 만들기', prompt: '서울 2박 3일 여행 일정을 처음부터 만들어줘. 하루 3곳 정도로 여유 있게 구성해줘.' },
@@ -152,6 +168,100 @@ function ActivityThread({ group, onToggle }) {
   )
 }
 
+function McpGuideDialog({ endpoint, onClose }) {
+  const [copyState, setCopyState] = useState('')
+  const closeRef = useRef(null)
+  const copyTimerRef = useRef(null)
+
+  useEffect(() => {
+    requestAnimationFrame(() => closeRef.current?.focus())
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      window.clearTimeout(copyTimerRef.current)
+    }
+  }, [onClose])
+
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(endpoint)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = endpoint
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        const copied = document.execCommand('copy')
+        textarea.remove()
+        if (!copied) throw new Error('copy failed')
+      }
+      setCopyState('복사됨')
+    } catch {
+      setCopyState('복사 실패')
+    }
+    window.clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = window.setTimeout(() => setCopyState(''), 2200)
+  }
+
+  return (
+    <div
+      className="ai-mcp-guide-overlay"
+      onPointerDown={event => {
+        if (event.target === event.currentTarget) onClose()
+      }}
+    >
+      <section
+        className="ai-mcp-guide-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ai-mcp-guide-title"
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <div className="ai-mcp-guide-dialog-header">
+          <div className="ai-mcp-guide-heading">
+            <span className="ai-mcp-guide-icon" aria-hidden="true"><IconApi size={17} /></span>
+            <div>
+              <span className="ai-mcp-guide-eyebrow">MCP 연결</span>
+              <h2 id="ai-mcp-guide-title">외부 AI에서 Travelink 사용</h2>
+            </div>
+          </div>
+          <button ref={closeRef} type="button" className="ai-mcp-guide-close" onClick={onClose} aria-label="MCP 가이드 닫기">
+            <IconClose size={17} />
+          </button>
+        </div>
+
+        <div className="ai-mcp-guide-body">
+          <p className="ai-mcp-guide-lead">
+            MCP를 지원하는 AI에 Travelink를 연결하면 장소 검색과 일정 링크 생성을 사용할 수 있습니다.
+          </p>
+
+          <div className="ai-mcp-guide-url-card">
+            <span className="ai-mcp-guide-url-label">MCP URL</span>
+            <div className="ai-mcp-guide-url-row">
+              <input className="ai-mcp-guide-url" value={endpoint} readOnly aria-label="Travelink MCP 서버 URL" />
+              <button type="button" className={'ai-mcp-guide-copy' + (copyState === '복사됨' ? ' ai-mcp-guide-copy--success' : '')} onClick={handleCopy}>
+                {copyState === '복사됨' ? <IconCheck size={14} /> : <IconApi size={14} />}
+                <span>{copyState || 'URL 복사'}</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="ai-mcp-guide-note">MCP 설정에서 위 URL을 HTTP 서버로 등록하면 Travelink 도구를 바로 사용할 수 있습니다.</p>
+          <p className="ai-mcp-guide-note">
+            별도 API key 입력 없이 URL만 등록하면 됩니다. <a href="https://github.com/hyuck0221/travel-plan/blob/master/MCP_GUIDE.md" target="_blank" rel="noreferrer">readme</a>
+          </p>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export default function AIAssistant({
   id,
   open,
@@ -174,10 +284,17 @@ export default function AIAssistant({
   const [panelGeometry, setPanelGeometry] = useState(getInitialPanelGeometry)
   const [isInteracting, setIsInteracting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mcpGuideOpen, setMcpGuideOpen] = useState(false)
   const inputRef = useRef(null)
   const contentEndRef = useRef(null)
   const interactionRef = useRef(null)
   const submitRef = useRef(null)
+  const mcpGuideTriggerRef = useRef(null)
+  const mcpEndpoint = resolveMcpEndpoint()
+  const closeMcpGuide = useCallback(() => {
+    setMcpGuideOpen(false)
+    requestAnimationFrame(() => mcpGuideTriggerRef.current?.focus())
+  }, [])
   const isRunning = ['loading', 'working', 'applying'].includes(status)
   const isThinking = status === 'working' || status === 'applying'
   const activeActivityGroup = [...activityGroups].reverse().find(group => group?.status === 'running')
@@ -221,7 +338,10 @@ export default function AIAssistant({
   }, [open])
 
   useEffect(() => {
-    if (!open) setSettingsOpen(false)
+    if (!open) {
+      setSettingsOpen(false)
+      setMcpGuideOpen(false)
+    }
   }, [open])
 
   useEffect(() => {
@@ -389,17 +509,30 @@ export default function AIAssistant({
         </div>
         <div className="ai-assistant-header-actions">
           {!settingsOpen && (
-            <button
-              type="button"
-              className="ai-settings-btn"
-              onPointerDown={event => event.stopPropagation()}
-              onClick={() => setSettingsOpen(true)}
-              disabled={isRunning}
-              aria-label="AI 모델 설정"
-              title="AI 모델 설정"
-            >
-              <IconSettings size={20} />
-            </button>
+            <>
+              <button
+                ref={mcpGuideTriggerRef}
+                type="button"
+                className="ai-settings-btn ai-mcp-guide-trigger"
+                onPointerDown={event => event.stopPropagation()}
+                onClick={() => setMcpGuideOpen(true)}
+                aria-label="MCP 가이드"
+                title="MCP 가이드"
+              >
+                <IconMcp size={28} />
+              </button>
+              <button
+                type="button"
+                className="ai-settings-btn"
+                onPointerDown={event => event.stopPropagation()}
+                onClick={() => setSettingsOpen(true)}
+                disabled={isRunning}
+                aria-label="AI 모델 설정"
+                title="AI 모델 설정"
+              >
+                <IconSettings size={20} />
+              </button>
+            </>
           )}
           <button className="ai-close-btn" onPointerDown={event => event.stopPropagation()} onClick={onClose} aria-label="Travelink AI 닫기">
             <IconClose size={17} />
@@ -518,6 +651,8 @@ export default function AIAssistant({
           onPointerDown={event => handleResizeStart(event, direction)}
         />
       ))}
+
+      {mcpGuideOpen && <McpGuideDialog endpoint={mcpEndpoint} onClose={closeMcpGuide} />}
     </aside>
   )
 }

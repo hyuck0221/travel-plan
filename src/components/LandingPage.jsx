@@ -19,12 +19,9 @@ const IcLink = () => (
   </svg>
 )
 
-const IcQR = () => (
+const IcMcp = () => (
   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-    <rect x="3" y="14" width="7" height="7"/>
-    <rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/>
-    <rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/>
+    <path d="M8 8.5 4.5 12 8 15.5M16 8.5l3.5 3.5-3.5 3.5M14 5l-4 14"/>
   </svg>
 )
 
@@ -82,7 +79,7 @@ const IcArrow = () => (
 const FEATURES = [
   { Icon: IcMapIntegration, title: '지도와 함께 계획', desc: '네이버 지도에서 장소를 검색하고 클릭만으로 일정에 추가. 경로가 지도 위에 선으로 연결됩니다.' },
   { Icon: IcLink,           title: 'URL 하나로 공유',  desc: '회원가입 없이 URL 하나로 전체 일정을 공유. 링크를 열면 바로 동일한 계획을 볼 수 있습니다.' },
-  { Icon: IcQR,             title: 'QR코드 생성',      desc: '여행 일정을 QR코드로 저장해 오프라인에서도 쉽게 공유하고 접근하세요.' },
+  { Icon: IcMcp,            title: 'MCP로 일정지도 생성', desc: 'Claude, Cursor 등 AI에 Travelink MCP를 연결해 여행 일정과 지도 링크를 만들어보세요.' },
   { Icon: IcLayers,         title: '여러 여행 관리',   desc: '제주도, 부산, 강원도… 여러 국내 여행 계획을 한 앱에서 스위칭하며 관리하세요.' },
   { Icon: IcLocation,       title: '실시간 현위치',    desc: '여행 중에는 현재 위치가 지도에 표시되고, 지금 진행 중인 일정이 자동으로 하이라이트됩니다.' },
   { Icon: IcSparkle,        title: 'AI로 일정 편집', desc: '브라우저 안의 로컬 AI로 새 일정을 만들고, 보고 있는 일정의 장소·시간·메모를 바로 수정하세요.' },

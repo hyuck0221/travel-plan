@@ -204,13 +204,13 @@ export default function App() {
   })
 
   useEffect(() => {
-    if (!aiOpen || localAgent.isRunning || aiConfig.mode !== 'local') return
+    if (!aiOpen || aiConfig.mode !== 'local') return
 
     // 전체 일정 생성과 후속 채팅 모두 로컬 모델을 사용하므로, AI 패널을
     // 연 시점에 모델을 백그라운드에서 준비해 첫 요청의 대기 시간을 줄인다.
     // 실패는 다음 실제 요청에서 기존 오류 안내로 처리한다.
     localAgent.warmUp().catch(() => {})
-  }, [aiOpen, aiConfig.mode, aiConfig.localModelId, localAgent.isRunning, localAgent.warmUp])
+  }, [aiOpen, aiConfig.mode, aiConfig.localModelId, localAgent.warmUp])
 
   const handleAiSubmit = useCallback((prompt) => {
     const planId = activeId

@@ -20,6 +20,8 @@ const PROVIDER_ENDPOINTS = Object.freeze({
   },
 })
 
+const NVIDIA_PROXY_URL = '/api/ai'
+
 function safeString(value, maxLength = 5000) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 }
@@ -78,6 +80,20 @@ async function readResponse(response, fallback) {
     throw new Error(`${message} (${response.status})`)
   }
   return payload
+}
+
+async function callNvidiaProxy(operation, apiKey, request, signal, fallback) {
+  const response = await fetch(NVIDIA_PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      operation,
+      apiKey,
+      ...(request ? { request } : {}),
+    }),
+    signal,
+  })
+  return readResponse(response, fallback)
 }
 
 function modelIdFromEntry(entry) {
@@ -154,6 +170,19 @@ async function fetchModelsForProvider(providerId, apiKey, signal) {
   const endpoint = PROVIDER_ENDPOINTS[providerId]
   if (!endpoint) throw new Error('지원하지 않는 AI 서비스입니다.')
 
+  if (providerId === 'nvidia') {
+    const payload = await callNvidiaProxy(
+      'models',
+      apiKey,
+      null,
+      signal,
+      'NVIDIA 모델 목록을 불러오지 못했습니다.',
+    )
+    const models = normalizeExternalModels(payload)
+    if (models.length === 0) throw new Error('사용할 수 있는 NVIDIA 채팅 모델을 찾지 못했습니다.')
+    return models
+  }
+
   const headers = providerId === 'gemini'
     ? { 'Content-Type': 'application/json' }
     : providerHeaders(providerId, apiKey)
@@ -225,19 +254,32 @@ function toCompletionResponse(payload) {
 
 async function callOpenAiCompatible(providerId, config, params, signal) {
   const endpoint = PROVIDER_ENDPOINTS[providerId]
+  const request = {
+    model: config.modelId,
+    messages: normalizeMessages(params.messages),
+    temperature: params.temperature,
+    top_p: params.top_p,
+    max_tokens: params.max_tokens,
+    // WebLLM 내부 스키마는 OpenAI 호환 API의 표준 형식과 다르므로
+    // 외부 API에는 JSON 출력 모드로만 변환해 전달한다.
+    ...(params.response_format ? { response_format: { type: 'json_object' } } : {}),
+  }
+
+  if (providerId === 'nvidia') {
+    const payload = await callNvidiaProxy(
+      'chat',
+      config.apiKey,
+      request,
+      signal,
+      'NVIDIA AI 응답을 받지 못했습니다.',
+    )
+    return toCompletionResponse(payload)
+  }
+
   const response = await fetch(endpoint.chatUrl, {
     method: 'POST',
     headers: providerHeaders(providerId, config.apiKey),
-    body: JSON.stringify({
-      model: config.modelId,
-      messages: normalizeMessages(params.messages),
-      temperature: params.temperature,
-      top_p: params.top_p,
-      max_tokens: params.max_tokens,
-      // WebLLM 내부 스키마는 OpenAI 호환 API의 표준 형식과 다르므로
-      // 외부 API에는 JSON 출력 모드로만 변환해 전달한다.
-      ...(params.response_format ? { response_format: { type: 'json_object' } } : {}),
-    }),
+    body: JSON.stringify(request),
     signal,
   })
   return toCompletionResponse(await readResponse(response, 'AI 응답을 받지 못했습니다.'))

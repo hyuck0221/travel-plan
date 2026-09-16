@@ -36,6 +36,11 @@ test('persists the selected local model without saving chat history', () => {
   })
 })
 
+test('labels Qwen 2.5 3B as the default local model', () => {
+  assert.equal(LOCAL_MODEL_OPTIONS[0].label, 'Qwen 2.5 3B')
+  assert.equal(LOCAL_MODEL_OPTIONS[0].badge, '기본')
+})
+
 test('persists an external provider connection and selected model', () => {
   withFakeStorage(() => {
     const config = {

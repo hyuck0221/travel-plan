@@ -10,6 +10,8 @@ import {
   answerScheduleQuestion,
   buildPlanOperations,
   compactConversationHistory,
+  getLocalEngine,
+  normalizeGeneratedDayItems,
   executeScheduleTool,
   isScheduleMutationRequest,
   parseAgentAction,
@@ -22,10 +24,49 @@ import {
   LOCAL_MODEL_FALLBACK_ID,
   LOCAL_MODEL_ID,
 } from './localAgent.js'
+import { resetMcpSession } from './mcpClient.js'
+
+function jsonResponse(value) {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function mcpSearchResponse(items) {
+  return jsonResponse({
+    result: {
+      content: [{ type: 'text', text: JSON.stringify(items) }],
+    },
+  })
+}
 
 test('uses the lighter browser model by default and a smaller fallback', () => {
   assert.equal(LOCAL_MODEL_ID, 'Qwen2.5-3B-Instruct-q4f16_1-MLC')
   assert.equal(LOCAL_MODEL_FALLBACK_ID, 'Qwen3-1.7B-q4f16_1-MLC')
+})
+
+test('does not retry the same unavailable WebGPU engine during the failure cooldown', { concurrency: false }, async () => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  let gpuReads = 0
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: {
+      get gpu() {
+        gpuReads += 1
+        return null
+      },
+    },
+  })
+
+  try {
+    await assert.rejects(getLocalEngine(), /WebGPU/)
+    await assert.rejects(getLocalEngine(), /WebGPU/)
+    assert.equal(gpuReads, 1)
+  } finally {
+    if (originalDescriptor) Object.defineProperty(globalThis, 'navigator', originalDescriptor)
+    else delete globalThis.navigator
+  }
 })
 
 test('parses the first-stage answer or control route', () => {
@@ -185,6 +226,14 @@ test('extracts JSON when the model adds prose or trailing commas', () => {
   assert.equal(action.title, '서울')
 })
 
+test('repairs common local-model JSON variants before applying a command', () => {
+  const action = parseAgentAction('결과입니다. {mode: \'apply\', title: \'제주\', message: \'완료\', items: [],}')
+
+  assert.equal(action.mode, 'apply')
+  assert.equal(action.title, '제주')
+  assert.equal(action.message, '완료')
+})
+
 test('accepts a top-level item array as an apply response', () => {
   const action = parseAgentAction('[{"destination":"서울"}]')
 
@@ -303,6 +352,35 @@ test('extracts only trip metadata without using a destination library', () => {
   assert.equal(validateTripPlan(aiItems, request).valid, true)
 })
 
+test('requires the requested number of cards per day for a full trip', () => {
+  const request = parseTripRequest('제주 2박 3일 일정 만들어줘.', new Date(2026, 8, 15))
+  const incomplete = Array.from({ length: 6 }, (_, index) => ({
+    destination: '제주 장소 ' + index,
+    date: `2026-09-${String(15 + Math.floor(index / 2)).padStart(2, '0')}`,
+    time: ['09:00', '15:00'][index % 2],
+  }))
+  const complete = Array.from({ length: 9 }, (_, index) => ({
+    destination: '제주 명소 ' + index,
+    date: `2026-09-${String(15 + Math.floor(index / 3)).padStart(2, '0')}`,
+    time: ['09:00', '12:30', '16:00'][index % 3],
+  }))
+
+  assert.equal(validateTripPlan(incomplete, request).valid, false)
+  assert.equal(validateTripPlan(complete, request).valid, true)
+})
+
+test('normalizes missing and duplicate daily times without losing unique places', () => {
+  const items = normalizeGeneratedDayItems([
+    { destination: '성산일출봉', time: '09:00' },
+    { destination: '섭지코지', time: '09:00' },
+    { destination: '동문시장', time: '' },
+  ], '2026-09-15')
+
+  assert.equal(items.length, 3)
+  assert.deepEqual(items.map(item => item.date), ['2026-09-15', '2026-09-15', '2026-09-15'])
+  assert.equal(new Set(items.map(item => item.time)).size, 3)
+})
+
 test('rejects a tiny model result that collapses a three-day trip into one card', () => {
   const request = parseTripRequest('서울 2박 3일 일정 짜줘.', new Date(2026, 8, 15))
   const collapsed = [{ destination: '서울', date: '2026-09-15', time: '07:00' }]
@@ -378,4 +456,175 @@ test('stops an already-cancelled agent before starting any orchestration', async
   )
 
   assert.deepEqual(events, [])
+})
+
+test('creates a three-day itinerary from operations-only model output', { concurrency: false }, async () => {
+  const originalFetch = globalThis.fetch
+  const chatRequests = []
+  resetMcpSession()
+
+  globalThis.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body || '{}')
+    if (url === '/api/ai') {
+      chatRequests.push(body)
+      const request = JSON.parse(body.request.messages.at(-1).content)
+      const day = request.fullTripDay
+      const operations = Array.from({ length: day.slots }, (_, index) => ({
+        action: 'add',
+        target: `제주 테스트 장소 ${day.day}-${index + 1}`,
+        date: day.date,
+        time: '09:00',
+        memo: `${day.day}일차 일정`,
+      }))
+      return jsonResponse({
+        choices: [{ message: { content: JSON.stringify({ mode: 'apply', operations }) } }],
+      })
+    }
+    if (url === '/mcp') {
+      if (body.method === 'initialize') return jsonResponse({ result: {} })
+      if (body.method === 'notifications/initialized') return jsonResponse({})
+      const query = body.params?.arguments?.query || '제주 장소'
+      return mcpSearchResponse([{
+        title: query,
+        address: '제주특별자치도',
+        roadAddress: '제주특별자치도',
+        lat: 33.4,
+        lng: 126.5,
+      }])
+    }
+    throw new Error('unexpected endpoint: ' + url)
+  }
+
+  try {
+    const result = await runLocalAgent({
+      prompt: '제주 2박 3일 일정 만들어줘.',
+      currentPlan: { title: '', items: [] },
+      aiConfig: {
+        mode: 'api',
+        external: {
+          provider: 'nvidia',
+          apiKey: 'nvidia-test-key',
+          modelId: 'meta/llama-3.1-8b-instruct',
+          connected: true,
+        },
+      },
+      signal: new AbortController().signal,
+      onApplyPlan: () => {},
+    })
+
+    assert.equal(chatRequests.length, 3)
+    assert.equal(chatRequests.every(request => request.operation === 'chat'), true)
+    assert.equal(result.action.mode, 'apply')
+    assert.equal(result.plan.items.length, 9)
+    assert.equal(new Set(result.plan.items.map(item => item.destination)).size, 9)
+    assert.deepEqual([...new Set(result.plan.items.map(item => item.date))], [
+      result.plan.items[0].date,
+      result.plan.items[3].date,
+      result.plan.items[6].date,
+    ])
+    for (const date of new Set(result.plan.items.map(item => item.date))) {
+      const dayItems = result.plan.items.filter(item => item.date === date)
+      assert.equal(dayItems.length, 3)
+      assert.equal(new Set(dayItems.map(item => item.time)).size, 3)
+      assert.equal(dayItems.every(item => Number.isFinite(item.lat) && Number.isFinite(item.lng)), true)
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+    resetMcpSession()
+  }
+})
+
+test('falls back to searched places when the model repeatedly returns invalid JSON', { concurrency: false }, async () => {
+  const originalFetch = globalThis.fetch
+  const chatRequests = []
+  resetMcpSession()
+
+  globalThis.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body || '{}')
+    if (url === '/api/ai') {
+      chatRequests.push(body)
+      return jsonResponse({ choices: [{ message: { content: '일정을 만들 수 없습니다.' } }] })
+    }
+    if (url === '/mcp') {
+      if (body.method === 'initialize') return jsonResponse({ result: {} })
+      if (body.method === 'notifications/initialized') return jsonResponse({})
+      const query = body.params?.arguments?.query || '제주'
+      return mcpSearchResponse(Array.from({ length: 10 }, (_, index) => ({
+        title: `${query} 검색 장소 ${index + 1}`,
+        address: '제주특별자치도',
+        roadAddress: '제주특별자치도',
+        lat: 33.4 + index / 100,
+        lng: 126.5 + index / 100,
+      })))
+    }
+    throw new Error('unexpected endpoint: ' + url)
+  }
+
+  try {
+    const result = await runLocalAgent({
+      prompt: '제주 2박 3일 일정 만들어줘.',
+      currentPlan: { title: '', items: [] },
+      aiConfig: {
+        mode: 'api',
+        external: {
+          provider: 'nvidia',
+          apiKey: 'nvidia-test-key',
+          modelId: 'meta/llama-3.1-8b-instruct',
+          connected: true,
+        },
+      },
+      signal: new AbortController().signal,
+      onApplyPlan: () => {},
+    })
+
+    assert.equal(chatRequests.length, 3)
+    assert.equal(result.action.mode, 'apply')
+    assert.match(result.action.message, /검색된 장소/)
+    assert.equal(result.plan.items.length, 9)
+    assert.equal(result.plan.items.every(item => item.address === '제주특별자치도'), true)
+  } finally {
+    globalThis.fetch = originalFetch
+    resetMcpSession()
+  }
+})
+
+test('completes a trip request from search results when WebGPU is unavailable', { concurrency: false }, async () => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  const originalFetch = globalThis.fetch
+  resetMcpSession()
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: {},
+  })
+  globalThis.fetch = async (url, options = {}) => {
+    if (url !== '/mcp') throw new Error('local fallback should not call an AI API')
+    const body = JSON.parse(options.body || '{}')
+    if (body.method === 'initialize') return jsonResponse({ result: {} })
+    if (body.method === 'notifications/initialized') return jsonResponse({})
+    return mcpSearchResponse(Array.from({ length: 3 }, (_, index) => ({
+      title: `제주 대체 장소 ${index + 1}`,
+      address: '제주특별자치도',
+      roadAddress: '제주특별자치도',
+      lat: 33.4 + index / 100,
+      lng: 126.5 + index / 100,
+    })))
+  }
+
+  try {
+    const result = await runLocalAgent({
+      prompt: '제주 1일 일정 만들어줘.',
+      currentPlan: { title: '', items: [] },
+      signal: new AbortController().signal,
+      onApplyPlan: () => {},
+    })
+
+    assert.equal(result.action.mode, 'apply')
+    assert.match(result.action.message, /검색된 장소/)
+    assert.equal(result.plan.items.length, 3)
+  } finally {
+    globalThis.fetch = originalFetch
+    if (originalDescriptor) Object.defineProperty(globalThis, 'navigator', originalDescriptor)
+    else delete globalThis.navigator
+    resetMcpSession()
+  }
 })

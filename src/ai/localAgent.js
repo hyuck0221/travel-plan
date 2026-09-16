@@ -20,6 +20,9 @@ let engineReady = false
 let activeModelId = LOCAL_MODEL_ID
 let loadingModelId = ''
 let loadedModelPreferenceId = ''
+let engineFailure = null
+
+const ENGINE_FAILURE_RETRY_DELAY_MS = 15000
 
 const MUTATION_SCHEMA = {
   type: 'object',
@@ -193,19 +196,71 @@ export function warmLocalEngine(onProgress, modelId = LOCAL_MODEL_ID) {
   return getLocalEngine(onProgress, modelId)
 }
 
-export async function getLocalEngine(onProgress, requestedModelId = LOCAL_MODEL_ID) {
+function rememberEngineFailure(modelId, error) {
+  if (!error || error.name === 'AbortError') return
+  engineFailure = {
+    modelId,
+    name: error.name || 'Error',
+    message: error.message || '로컬 AI를 준비하지 못했습니다.',
+    timestamp: Date.now(),
+  }
+}
+
+function getRecentEngineFailure(modelId) {
+  if (!engineFailure || engineFailure.modelId !== modelId) return null
+  if (Date.now() - engineFailure.timestamp >= ENGINE_FAILURE_RETRY_DELAY_MS) {
+    engineFailure = null
+    return null
+  }
+  const error = new Error(engineFailure.message)
+  error.name = engineFailure.name
+  return error
+}
+
+async function assertWebGpuAvailable() {
   if (!globalThis.navigator?.gpu) {
     throw new Error('이 브라우저는 WebGPU를 지원하지 않아 로컬 AI를 실행할 수 없습니다.')
   }
 
+  if (typeof globalThis.navigator.gpu.requestAdapter !== 'function') return
+
+  try {
+    const adapter = await globalThis.navigator.gpu.requestAdapter()
+    if (!adapter) throw new Error('WebGPU 어댑터를 찾지 못했습니다.')
+  } catch (error) {
+    const message = error?.message === 'WebGPU 어댑터를 찾지 못했습니다.'
+      ? error.message
+      : 'WebGPU를 초기화하지 못해 로컬 AI를 실행할 수 없습니다.'
+    throw new Error(message)
+  }
+}
+
+export async function getLocalEngine(onProgress, requestedModelId = LOCAL_MODEL_ID) {
   const modelId = String(requestedModelId || LOCAL_MODEL_ID)
-  progressListener = onProgress
+  if (engineReady && engineInstance && loadedModelPreferenceId === modelId) return engineInstance
+  const recentFailure = getRecentEngineFailure(modelId)
+  if (recentFailure) throw recentFailure
+
+  if (enginePromise) {
+    if (loadingModelId === modelId) return enginePromise
+    cancelLocalEngineLoad()
+  }
+
+  await assertWebGpuAvailable().catch(error => {
+    rememberEngineFailure(modelId, error)
+    throw error
+  })
+
+  // requestAdapter() above yields to the event loop. Re-check the shared
+  // state so two callers that start at the same time still share one load.
   if (engineReady && engineInstance && loadedModelPreferenceId === modelId) return engineInstance
   if (engineReady && engineInstance && loadedModelPreferenceId !== modelId) await unloadLocalEngine()
   if (enginePromise) {
     if (loadingModelId === modelId) return enginePromise
     cancelLocalEngineLoad()
   }
+
+  progressListener = onProgress
 
   const loadToken = { cancelled: false, reject: null, promise: null }
   engineLoadToken = loadToken
@@ -255,8 +310,10 @@ export async function getLocalEngine(onProgress, requestedModelId = LOCAL_MODEL_
     engineInstance = engine
     engineReady = true
     loadedModelPreferenceId = modelId
+    engineFailure = null
     return engine
   } catch (error) {
+    rememberEngineFailure(modelId, error)
     if (enginePromise === pendingPromise) {
       engineReady = false
       engineInstance = null
@@ -332,17 +389,15 @@ export function compactConversationHistory(history, { limit = 10, maxContent = 1
 
 function stripThinking(text) {
   return String(text || '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think\b[\s\S]*?(?:<\/think>|$)/gi, '')
     .replace(/<\|(?:im_end|endoftext|eot_id|end|assistant)\|>/gi, '')
     .trim()
 }
 
-function extractJsonCandidates(text) {
+function extractJsonCandidates(text, { includeArrays = false } = {}) {
   const candidates = []
   for (let start = 0; start < text.length; start += 1) {
-    // 임베디드 배열(items)의 []를 최상위 응답으로 오인하지 않도록
-    // 설명 속 JSON 객체만 후보로 수집한다. 최상위 배열은 호출부에서 별도 처리한다.
-    if (text[start] !== '{') continue
+    if (text[start] !== '{' && (!includeArrays || text[start] !== '[')) continue
 
     const stack = []
     let inString = false
@@ -370,9 +425,58 @@ function extractJsonCandidates(text) {
   return candidates
 }
 
+function convertSingleQuotedStrings(value) {
+  let result = ''
+  let inSingle = false
+  let inDouble = false
+  let escaped = false
+
+  for (const char of String(value || '')) {
+    if (inSingle) {
+      if (escaped) {
+        result += char === "'" ? "'" : '\\' + char
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === "'") {
+        inSingle = false
+        result += '"'
+      } else {
+        result += char === '"' ? '\\"' : char
+      }
+      continue
+    }
+
+    if (inDouble) {
+      result += char
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inDouble = false
+      continue
+    }
+
+    if (char === "'") {
+      inSingle = true
+      result += '"'
+    } else {
+      result += char
+      if (char === '"') inDouble = true
+    }
+  }
+
+  if (escaped) result += '\\'
+  return result
+}
+
+function repairJsonCandidate(candidate) {
+  return convertSingleQuotedStrings(candidate)
+    .replace(/([{,]\s*)([A-Za-z_$][\w$-]*)\s*:/gu, '$1"$2":')
+    .replace(/,\s*([}\]])/gu, '$1')
+    .trim()
+}
+
 function tryParseJson(candidate) {
-  const attempts = [candidate, candidate.replace(/,\s*([}\]])/g, '$1')]
-  if (!candidate.includes('"') && candidate.includes("'")) attempts.push(candidate.replace(/'/g, '"'))
+  const attempts = [candidate, repairJsonCandidate(candidate)]
 
   for (const attempt of attempts) {
     try { return JSON.parse(attempt) } catch {}
@@ -409,9 +513,9 @@ function parseStructuredResponse(rawText) {
     .replace(new RegExp('\\s*' + fence + fence + fence + '$'), '')
     .trim()
 
-  const candidates = []
+  const candidates = [...cleaned.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map(match => match[1].trim())
   if (cleaned.startsWith('{') || cleaned.startsWith('[')) candidates.push(cleaned)
-  candidates.push(...extractJsonCandidates(cleaned))
+  candidates.push(...extractJsonCandidates(cleaned, { includeArrays: true }))
 
   for (const candidate of candidates) {
     const parsed = tryParseJson(candidate)
@@ -800,7 +904,7 @@ export function parseTripRequest(prompt, now = new Date()) {
  * 장소 데이터는 검사하지 않고, 모델이 요청한 기간과 카드 수를 지켰는지만
  * 확인해 불완전한 응답이 전체 여행 계획으로 저장되는 것을 막는다.
  */
-export function validateTripPlan(items, { days, startDate } = {}) {
+export function validateTripPlan(items, { days, startDate, slotsPerDay = 2 } = {}) {
   const safeItems = Array.isArray(items) ? items : []
   const issues = []
   const dates = new Set(safeItems.map(item => normalizeDate(item?.date)).filter(Boolean))
@@ -813,16 +917,22 @@ export function validateTripPlan(items, { days, startDate } = {}) {
 
   if (!Number.isInteger(days) || days < 1) issues.push('여행 일수가 없습니다.')
   else {
+    const expectedSlots = Number.isInteger(slotsPerDay) && slotsPerDay > 0 ? slotsPerDay : 2
+    const expectedItemCount = days * expectedSlots
     const expectedDates = new Set(Array.from({ length: days }, (_, index) => addDaysToIso(startDate, index)))
     if (dates.size !== days || [...expectedDates].some(date => !dates.has(date))) {
       issues.push('여행 날짜가 요청한 일수만큼 이어지지 않습니다.')
     }
     for (const date of expectedDates) {
-      if ((countsByDate.get(date) || 0) < 2) issues.push(`${date} 일정이 두 개보다 적습니다.`)
+      if ((countsByDate.get(date) || 0) < expectedSlots) {
+        issues.push(`${date} 일정이 ${expectedSlots}개보다 적습니다.`)
+      }
     }
-    if (destinations.size < days * 2) issues.push('서로 다른 장소가 충분하지 않습니다.')
+    if (safeItems.length < expectedItemCount) issues.push('전체 일정 카드 수가 요청한 개수보다 적습니다.')
+    if (destinations.size < expectedItemCount) issues.push('서로 다른 장소가 충분하지 않습니다.')
   }
   if (safeItems.some(item => !safeString(item?.destination, 180))) issues.push('장소명이 비어 있습니다.')
+  if (safeItems.some(item => !normalizeTime(item?.time))) issues.push('방문 시간이 비어 있습니다.')
 
   return { valid: issues.length === 0, issues }
 }
@@ -1609,10 +1719,37 @@ function buildMutationMessages(prompt, currentPlan, conversationHistory, tripReq
   ]
 }
 
-function normalizeGeneratedDayItems(items, dayDate, usedDestinations = new Set()) {
+function generatedItemsFromAction(action, prompt) {
+  if (action?.mode !== 'apply') return []
+  if (Array.isArray(action.operations) && action.operations.length > 0) {
+    return applyMutationCommand(action, [], prompt, { replaceAll: true }).items
+  }
+  return normalizeItems(action, [])
+}
+
+const DEFAULT_TRIP_TIMES = Object.freeze(['09:00', '12:30', '16:00', '19:30'])
+
+function addMinutesToTime(value, minutes) {
+  const [hour, minute] = String(value || '09:00').split(':').map(Number)
+  const total = (hour * 60 + minute + minutes) % (24 * 60)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+function nextAvailableTripTime(preferred, usedTimes, index) {
+  let candidate = normalizeTime(preferred) || DEFAULT_TRIP_TIMES[index] || addMinutesToTime(DEFAULT_TRIP_TIMES.at(-1), (index - DEFAULT_TRIP_TIMES.length + 1) * 30)
+  let guard = 0
+  while (usedTimes.has(candidate) && guard < 48) {
+    candidate = addMinutesToTime(candidate, 30)
+    guard += 1
+  }
+  return candidate
+}
+
+export function normalizeGeneratedDayItems(items, dayDate, usedDestinations = new Set()) {
   const seenDestinations = new Set()
+  const seenTimes = new Set()
   return (Array.isArray(items) ? items : [])
-    .map(item => {
+    .map((item, index) => {
       const destination = cleanPlaceCandidate(item?.destination)
       return {
         ...item,
@@ -1620,15 +1757,20 @@ function normalizeGeneratedDayItems(items, dayDate, usedDestinations = new Set()
         // 하루 단위 생성의 날짜는 모델에 다시 물어보지 않고 요청한 날짜를
         // 기준으로 정렬한다. 장소·시간·메모의 선택은 계속 모델이 담당한다.
         date: dayDate,
-        time: normalizeTime(item?.time),
+        time: normalizeTime(item?.time) || DEFAULT_TRIP_TIMES[index] || addMinutesToTime(DEFAULT_TRIP_TIMES.at(-1), (index - DEFAULT_TRIP_TIMES.length + 1) * 30),
       }
     })
     .filter(item => {
       const normalizedDestination = normalizeDestination(item.destination)
-      if (!normalizedDestination || !item.time) return false
+      if (!normalizedDestination || /^(?:일정|여행|코스|장소|관광지|맛집|카페)$/u.test(normalizedDestination)) return false
       if (seenDestinations.has(normalizedDestination) || usedDestinations.has(normalizedDestination)) return false
       seenDestinations.add(normalizedDestination)
       return true
+    })
+    .map((item, index) => {
+      const time = nextAvailableTripTime(item.time, seenTimes, index)
+      seenTimes.add(time)
+      return { ...item, time }
     })
     .sort((left, right) => left.time.localeCompare(right.time))
 }
@@ -1641,6 +1783,9 @@ function validateGeneratedDay(items, dayDate, slots) {
   if (safeItems.some(item => !normalizeTime(item.time))) issues.push('시간이 비어 있습니다.')
   if (new Set(safeItems.map(item => normalizeDestination(item.destination))).size < Math.min(2, slots)) {
     issues.push('서로 다른 장소가 충분하지 않습니다.')
+  }
+  if (new Set(safeItems.map(item => normalizeTime(item.time))).size < safeItems.length) {
+    issues.push('하루 방문 시간이 서로 겹칩니다.')
   }
   return { valid: issues.length === 0, issues }
 }
@@ -1676,11 +1821,7 @@ async function generateFullTripSlotItem(engine, prompt, conversationHistory, tri
       action = null
     }
 
-    const rawItems = action?.mode === 'apply'
-      ? action.intent
-        ? applyMutationCommand(action, [], prompt + ' ' + date, { replaceAll: true }).items
-        : normalizeItems(action, [])
-      : []
+    const rawItems = generatedItemsFromAction(action, prompt + ' ' + date)
     const candidateItems = normalizeGeneratedDayItems(rawItems, date, usedDestinations)
     const quality = validateGeneratedDay(candidateItems, date, 1)
     if (quality.valid) return candidateItems[0]
@@ -1698,6 +1839,66 @@ async function generateFullTripSlotItem(engine, prompt, conversationHistory, tri
   }
 
   throw new Error(day + '일차 ' + slot + '번째 장소 생성에 실패했습니다. ' + issues.join(' '))
+}
+
+const FALLBACK_TRIP_SEARCH_SUFFIXES = Object.freeze(['', '관광지', '명소', '맛집', '카페', '박물관'])
+
+/**
+ * 모델이 계속 구조화 응답을 내지 못할 때도 여행 요청을 빈 결과로 끝내지
+ * 않는다. 네이버 검색 결과에서 실제 장소를 수집해 날짜·시간만 브라우저가
+ * 결정한다. 좌표까지 함께 보존하므로 생성 직후 장소별 재검색도 줄어든다.
+ */
+export async function createFallbackTripItems(tripRequest, signal, onEvent) {
+  const expectedCount = tripRequest.days * tripRequest.slotsPerDay
+  const candidates = []
+  const seen = new Set()
+  let lastError = null
+
+  for (const suffix of FALLBACK_TRIP_SEARCH_SUFFIXES) {
+    const query = [tripRequest.destination, suffix].filter(Boolean).join(' ')
+    onEvent?.({ type: 'stage', key: 'fallback-search', label: `${query}에서 여행지를 보완하는 중` })
+    try {
+      const results = await searchPlaces(query, signal, {
+        maxAttempts: 1,
+        onAttempt: createSearchAttemptReporter(onEvent, signal),
+      })
+      for (const result of results) {
+        const destination = cleanPlaceCandidate(result?.title)
+        const normalizedDestination = normalizeDestination(destination)
+        if (!normalizedDestination || seen.has(normalizedDestination)) continue
+        seen.add(normalizedDestination)
+        candidates.push({ ...result, title: destination })
+        if (candidates.length >= expectedCount) break
+      }
+      if (candidates.length >= expectedCount) break
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error
+      lastError = error
+    }
+  }
+
+  if (candidates.length < expectedCount) {
+    const detail = lastError?.message ? ` ${lastError.message}` : ''
+    throw new Error(`검색 결과에서 ${expectedCount}개의 서로 다른 장소를 찾지 못했습니다.${detail}`)
+  }
+
+  return candidates.slice(0, expectedCount).map((result, index) => {
+    const dayIndex = Math.floor(index / tripRequest.slotsPerDay)
+    const slotIndex = index % tripRequest.slotsPerDay
+    return {
+      id: makeId(),
+      date: addDaysToIso(tripRequest.startDate, dayIndex),
+      time: DEFAULT_TRIP_TIMES[slotIndex] || addMinutesToTime(DEFAULT_TRIP_TIMES.at(-1), (slotIndex - DEFAULT_TRIP_TIMES.length + 1) * 30),
+      destination: result.title,
+      address: result.roadAddress || result.address || '',
+      memo: result.category || `${dayIndex + 1}일차 방문지`,
+      lat: isCoordinate(result.lat) ? Number(result.lat) : null,
+      lng: isCoordinate(result.lng) ? Number(result.lng) : null,
+      order: Date.now() + index,
+      category: result.category || '',
+      cost: '',
+    }
+  })
 }
 
 /**
@@ -1745,9 +1946,7 @@ async function generateFullTripItems(engine, prompt, conversationHistory, tripRe
 
       let candidateItems = []
       if (action?.mode === 'apply') {
-        candidateItems = action.intent
-          ? applyMutationCommand(action, [], prompt + ' ' + date, { replaceAll: true }).items
-          : normalizeItems(action, [])
+        candidateItems = generatedItemsFromAction(action, prompt + ' ' + date)
         candidateItems = normalizeGeneratedDayItems(candidateItems, date, usedDestinations)
       }
       if (candidateItems.length > bestDayItems.length) bestDayItems = candidateItems
@@ -1774,6 +1973,9 @@ async function generateFullTripItems(engine, prompt, conversationHistory, tripRe
     }
 
     dayItems = (dayItems || bestDayItems).slice(0, tripRequest.slotsPerDay)
+    if (dayItems.length === 0) {
+      throw new Error(day + '일차 일정에서 유효한 장소를 생성하지 못했습니다.')
+    }
     if (dayItems.length < tripRequest.slotsPerDay) {
       onEvent?.({ type: 'stage', key: 'plan', label: day + '일차 일정을 한 장소씩 보완 중' })
       const dayUsedDestinations = new Set([
@@ -1910,19 +2112,33 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
     }
   }
 
-  const engine = aiConfig?.mode === 'api'
-    ? createExternalEngine(aiConfig.external, signal)
-    : await getLocalEngine(onProgress, aiConfig?.localModelId || LOCAL_MODEL_ID)
+  let engine = null
+  let engineLoadError = null
+  try {
+    engine = aiConfig?.mode === 'api'
+      ? createExternalEngine(aiConfig.external, signal)
+      : await getLocalEngine(onProgress, aiConfig?.localModelId || LOCAL_MODEL_ID)
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error
+    if (!fullTripRequested) throw error
+    engineLoadError = error
+    onEvent?.({ type: 'warning', label: '로컬 모델을 준비하지 못해 검색 결과로 여행 일정을 구성합니다.' })
+  }
   throwIfAborted(signal)
-  onEvent?.({ type: 'stage', key: 'model-ready', label: '질문을 분석하는 중' })
+  onEvent?.({ type: 'stage', key: 'model-ready', label: engine ? '질문을 분석하는 중' : '검색 결과로 일정을 구성하는 중' })
 
-  const routeDecision = await classifyRequest(
-    engine,
-    cleanPrompt,
-    conversationHistory,
-    signal,
-    mutationRequested,
-  )
+  // 명확한 일정 변경 요청은 이미 브라우저 정규식으로 control임을 확인했다.
+  // 이 경우 작은 모델에 라우팅 JSON을 한 번 더 묻지 않아도 되므로, 전체
+  // 여행 생성에서 가장 자주 발생하던 분류·JSON 실패 지점을 제거한다.
+  const routeDecision = mutationRequested
+    ? { route: 'control' }
+    : await classifyRequest(
+      engine,
+      cleanPrompt,
+      conversationHistory,
+      signal,
+      mutationRequested,
+    )
   onEvent?.({
     type: 'stage',
     key: 'route',
@@ -1933,15 +2149,19 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
   let controlDecision = null
   let shouldRouteToControl = mutationRequested || routeDecision.route === 'control'
   if (shouldRouteToControl) {
-    controlDecision = await analyzeControlRequest(
-      engine,
-      cleanPrompt,
-      conversationHistory,
-      currentPlan,
-      tripRequest,
-      signal,
-      mutationRequested,
-    )
+    controlDecision = fullTripRequested
+      ? { tool: 'replace_schedule', needsPlan: false, query: '' }
+      : mutationRequested
+        ? fallbackControlDecision(cleanPrompt, currentPlan, tripRequest, mutationRequested)
+        : await analyzeControlRequest(
+          engine,
+          cleanPrompt,
+          conversationHistory,
+          currentPlan,
+          tripRequest,
+          signal,
+          mutationRequested,
+        )
     if (controlDecision.tool === 'none' || (!mutationRequested && controlDecision.tool === 'search_places')) {
       // 장소 검색은 일정 수정 도구가 아니라 검색 결과를 포함한 답변 경로다.
       shouldRouteToControl = false
@@ -1977,17 +2197,41 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
 
   if (shouldRouteToControl) {
     if (fullTripRequested) {
-      const generatedItems = await generateFullTripItems(
-        engine,
-        cleanPrompt,
-        conversationHistory,
-        tripRequest,
-        signal,
-        onEvent,
-      )
+      let generatedItems
+      let generationError = null
+      let usedFallback = Boolean(engineLoadError)
+      try {
+        if (engineLoadError) throw engineLoadError
+        generatedItems = await generateFullTripItems(
+          engine,
+          cleanPrompt,
+          conversationHistory,
+          tripRequest,
+          signal,
+          onEvent,
+        )
+        const quality = validateTripPlan(generatedItems, tripRequest)
+        if (!quality.valid) {
+          throw new Error(quality.issues.join(' '))
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error
+        generationError = error
+        if (!engineLoadError) {
+          onEvent?.({ type: 'warning', label: 'AI 응답이 불완전해 검색 결과로 일정을 보완합니다.' })
+        }
+        usedFallback = true
+        generatedItems = await createFallbackTripItems(tripRequest, signal, onEvent)
+      }
+
       const quality = validateTripPlan(generatedItems, tripRequest)
       if (!quality.valid) {
-        throw new Error('AI가 요청한 여행 기간에 맞는 일정을 만들지 못했습니다. ' + quality.issues.join(' '))
+        const detail = quality.issues.join(' ')
+        throw new Error(
+          generationError
+            ? 'AI와 검색 결과 모두 요청한 여행 기간을 채우지 못했습니다. ' + detail
+            : 'AI가 요청한 여행 기간에 맞는 일정을 만들지 못했습니다. ' + detail,
+        )
       }
       const toolResult = await executeScheduleTool('replace_schedule', {
         title: tripRequest.destination + ' ' + tripRequest.nights + '박 ' + tripRequest.days + '일 여행',
@@ -2002,7 +2246,9 @@ export async function runLocalAgent({ prompt, currentPlan, conversationHistory =
         mode: 'apply',
         intent: 'replace',
         title: tripRequest.destination + ' ' + tripRequest.nights + '박 ' + tripRequest.days + '일 여행',
-        message: 'AI가 여행지에 맞는 날짜별 일정을 구성했습니다.',
+        message: usedFallback
+          ? 'AI 응답이 불완전해 검색된 장소로 날짜별 일정을 구성했습니다.'
+          : 'AI가 여행지에 맞는 날짜별 일정을 구성했습니다.',
         query: '',
         items: toolResult.items,
         operations: [],

@@ -279,6 +279,13 @@ export const IconApi = (p) => (
   </Icon>
 )
 
+export const IconMcp = ({ size = 20, ...props }) => (
+  <svg width={size} height={size} viewBox="0 0 36 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <rect x="1" y="1" width="34" height="22" rx="6" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1.5" />
+    <text x="18" y="15.4" textAnchor="middle" fill="currentColor" stroke="none" fontFamily="Arial, sans-serif" fontSize="8" fontWeight="800" letterSpacing="0.5">MCP</text>
+  </svg>
+)
+
 export const IconLock = (p) => (
   <Icon {...p}>
     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>

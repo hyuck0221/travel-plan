@@ -4,10 +4,10 @@ export const LOCAL_MODEL_FALLBACK_ID = 'Qwen3-1.7B-q4f16_1-MLC'
 export const LOCAL_MODEL_FALLBACK_LABEL = 'Qwen 3 1.7B'
 
 // WebLLM 0.2.85에 포함된 Qwen 계열 모델만 노출한다.
-// 기본 모델은 현재 사용 중인 3B 모델로 고정하고, 나머지는 사용자가
+// 기본 모델은 3B 모델로 고정하고, 나머지는 사용자가
 // 기기의 WebGPU 메모리에 맞춰 선택한다.
 export const LOCAL_MODEL_OPTIONS = Object.freeze([
-  { id: LOCAL_MODEL_ID, label: LOCAL_MODEL_LABEL, badge: '현재' },
+  { id: LOCAL_MODEL_ID, label: LOCAL_MODEL_LABEL, badge: '기본' },
   { id: 'Qwen3-4B-q4f16_1-MLC', label: 'Qwen 3 4B', badge: '상위' },
   { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 7B', badge: '상위' },
   { id: 'Qwen3-8B-q4f16_1-MLC', label: 'Qwen 3 8B', badge: '고성능' },

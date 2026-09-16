@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fetchNvidiaUpstream } from './server/aiProxy.js'
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -22,13 +23,18 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
             const isGithubStarsRequest = req.method === 'GET' && req.url === '/api/github-stars'
-            if ((!isGithubStarsRequest && req.method !== 'POST') || !req.url.startsWith('/api/')) return next()
+            const pathname = String(req.url || '').split('?')[0]
+            if ((!isGithubStarsRequest && req.method !== 'POST') || !pathname.startsWith('/api/')) return next()
 
             const body = await readBody(req)
             res.setHeader('Content-Type', 'application/json')
 
             try {
-              if (req.url === '/api/search') {
+              if (pathname === '/api/ai') {
+                const payload = await fetchNvidiaUpstream(body)
+                res.end(JSON.stringify(payload))
+
+              } else if (pathname === '/api/search') {
                 const { query } = body
                 const r = await fetch(
                   `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=10&sort=random`,
@@ -50,7 +56,7 @@ export default defineConfig(({ mode }) => {
                 }))
                 res.end(JSON.stringify({ items }))
 
-              } else if (req.url === '/api/shorten') {
+              } else if (pathname === '/api/shorten') {
                 const { url } = body
                 const r = await fetch('https://apisis.dev/api/url/short/apisis', {
                   method: 'POST',
@@ -60,7 +66,7 @@ export default defineConfig(({ mode }) => {
                 const data = await r.json()
                 res.end(JSON.stringify({ shortUrl: data?.payload?.url || url }))
 
-              } else if (req.url === '/api/qr') {
+              } else if (pathname === '/api/qr') {
                 const { url } = body
                 // 단축 URL 생성 후 QR 생성
                 let qrTargetUrl = url
@@ -83,7 +89,7 @@ export default defineConfig(({ mode }) => {
                 const data = await r.json()
                 res.end(JSON.stringify({ image: data?.payload?.imageBase64 }))
 
-              } else if (req.method === 'GET' && req.url === '/api/github-stars') {
+              } else if (req.method === 'GET' && pathname === '/api/github-stars') {
                 const r = await fetch('https://github.com/hyuck0221/travel-plan', {
                   headers: { Accept: 'text/html', 'User-Agent': 'Travelink GitHub Star Counter' },
                 })
@@ -98,8 +104,8 @@ export default defineConfig(({ mode }) => {
                 next()
               }
             } catch (err) {
-              res.statusCode = 500
-              res.end(JSON.stringify({ error: err.message }))
+              res.statusCode = err?.statusCode || 500
+              res.end(JSON.stringify(err?.payload || { error: err.message }))
             }
           })
         },
