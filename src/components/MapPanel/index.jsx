@@ -46,7 +46,7 @@ function createStackedMarkerIcon(numbers, active = false) {
 }
 
 const PREVIEW_SVG = `
-  <svg width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg">
+  <svg class="preview-map-marker" width="32" height="44" viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg">
     <path d="M16 0C7.163 0 0 7.163 0 16c0 10 16 28 16 28S32 26 32 16C32 7.163 24.837 0 16 0z"
       fill="#64748b" stroke="white" stroke-width="2"/>
     <circle cx="16" cy="16" r="6" fill="white"/>
@@ -108,20 +108,28 @@ function buildStackedInfoWindowContent(group, onSelect, onClose) {
     </div>`
 }
 
-function buildInfoWindowContent(destination, address, onRegister, onClose) {
+function buildInfoWindowContent(destination, address, isLoading, onRegister, onClose) {
   const F = `-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif`
   const esc = s => (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   window.__registerPreviewPlace = onRegister
   window.__closePreviewPlace = onClose
+  const detail = isLoading
+    ? `<div class="preview-info-window__loading" role="status">
+        <span class="preview-info-window__loading-dot" aria-hidden="true"></span>
+        <span>위치 정보 불러오는 중…</span>
+      </div>`
+    : address
+      ? `<div class="preview-info-window__details preview-info-window__details--loaded">${esc(address)}</div>`
+      : ''
   return `
-    <div style="background:white;border-radius:10px;padding:12px 14px;
+    <div class="preview-info-window${isLoading ? ' preview-info-window--loading' : ' preview-info-window--ready'}"
+      style="background:white;border-radius:10px;padding:12px 14px;
       box-shadow:0 4px 20px rgba(0,0,0,0.18);min-width:160px;max-width:220px;
       font-family:${F};">
-      ${destination ? `<div style="font-size:13px;font-weight:600;color:#1a1a2e;
-        margin-bottom:${address ? '3px' : '10px'};overflow:hidden;
+      ${destination ? `<div class="preview-info-window__title" style="font-size:13px;font-weight:600;color:#1a1a2e;
+        margin-bottom:${address || isLoading ? '3px' : '10px'};overflow:hidden;
         text-overflow:ellipsis;white-space:nowrap;">${esc(destination)}</div>` : ''}
-      ${address ? `<div style="font-size:11px;color:#64748b;margin-bottom:10px;
-        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(address)}</div>` : ''}
+      ${detail}
       <div style="display:flex;gap:6px;">
         <button onclick="window.__registerPreviewPlace()"
           style="flex:1;padding:8px 0;background:#4F9CF9;color:white;border:none;
@@ -224,6 +232,8 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   const itemsRef = useRef(items)
   const previewMarkerRef = useRef(null)
   const previewInfoWindowRef = useRef(null)
+  const previewInfoWindowAnchorRef = useRef(null)
+  const previewRequestRef = useRef(0)
   const stackedInfoWindowRef = useRef(null)
   const stackedInfoWindowKeyRef = useRef(null)
   const stackedInfoWindowGroupSignatureRef = useRef(null)
@@ -240,7 +250,10 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
   useEffect(() => { itemsRef.current = items }, [items])
   useEffect(() => {
     isLockedRef.current = isLocked
-    if (isLocked) setPreviewPlace(null)
+    if (isLocked) {
+      previewRequestRef.current += 1
+      setPreviewPlace(null)
+    }
   }, [isLocked])
 
   const [previewPlace, setPreviewPlace] = useState(null)
@@ -359,13 +372,27 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       }
       setMapReady(true)
 
-      // Map click → close stacked popup + preview pin with reverse geocode
+      // Map click → show the preview immediately, then fill in reverse-geocoded data.
       window.naver.maps.Event.addListener(map, 'click', (e) => {
         closeStackedInfoWindow()
         if (isLockedRef.current) return
 
         const lat = e.coord.lat()
         const lng = e.coord.lng()
+        const coordinateLabel = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+        const requestId = previewRequestRef.current + 1
+        previewRequestRef.current = requestId
+
+        // Do not make the user wait for reverse geocoding before seeing the
+        // pin and the register/cancel actions.
+        setPreviewPlace({
+          lat,
+          lng,
+          destination: coordinateLabel,
+          address: '',
+          isLoading: true,
+          requestId,
+        })
 
         if (window.naver.maps.Service?.reverseGeocode) {
           window.naver.maps.Service.reverseGeocode(
@@ -381,11 +408,23 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
               if (status === window.naver.maps.Service.Status.OK) {
                 ;({ name, address } = parseReverseGeocode(response))
               }
-              setPreviewPlace({ lat, lng, destination: name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`, address })
+              if (requestId !== previewRequestRef.current) return
+              setPreviewPlace(current => {
+                if (!current || current.requestId !== requestId) return current
+                return {
+                  ...current,
+                  destination: name || coordinateLabel,
+                  address,
+                  isLoading: false,
+                }
+              })
             }
           )
         } else {
-          setPreviewPlace({ lat, lng, destination: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, address: '' })
+          setPreviewPlace(current => {
+            if (!current || current.requestId !== requestId) return current
+            return { ...current, isLoading: false }
+          })
         }
       })
       return true
@@ -398,13 +437,9 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     return () => clearInterval(interval)
   }, [])
 
-  // Preview pin + InfoWindow
+  // Preview pin: create it once per location so a reverse-geocode update does
+  // not make the pin blink or replay its entrance animation.
   useEffect(() => {
-    if (previewMarkerRef.current) { previewMarkerRef.current.setMap(null); previewMarkerRef.current = null }
-    if (previewInfoWindowRef.current) { previewInfoWindowRef.current.close(); previewInfoWindowRef.current = null }
-    delete window.__registerPreviewPlace
-    delete window.__closePreviewPlace
-
     if (!previewPlace || !mapInstanceRef.current || !hasNaverMapApi()) return
 
     const marker = new window.naver.maps.Marker({
@@ -415,12 +450,57 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     })
     previewMarkerRef.current = marker
 
+    return () => {
+      if (previewMarkerRef.current === marker) {
+        marker.setMap(null)
+        previewMarkerRef.current = null
+      }
+    }
+  }, [previewPlace?.lat, previewPlace?.lng, mapReady])
+
+  // Preview info window: update its content as soon as the async location
+  // data arrives while keeping the already-visible pin in place.
+  useEffect(() => {
+    delete window.__registerPreviewPlace
+    delete window.__closePreviewPlace
+
+    if (!previewPlace || !mapInstanceRef.current || !hasNaverMapApi() || !previewMarkerRef.current) {
+      if (previewInfoWindowRef.current) previewInfoWindowRef.current.close()
+      previewInfoWindowRef.current = null
+      previewInfoWindowAnchorRef.current = null
+      return
+    }
+
     const content = buildInfoWindowContent(
       previewPlace.destination,
       previewPlace.address,
-      () => { onRegisterRef.current(previewPlace); setPreviewPlace(null) },
-      () => setPreviewPlace(null)
+      previewPlace.isLoading,
+      () => {
+        previewRequestRef.current += 1
+        onRegisterRef.current({
+          lat: previewPlace.lat,
+          lng: previewPlace.lng,
+          destination: previewPlace.destination,
+          address: previewPlace.address,
+        })
+        setPreviewPlace(null)
+      },
+      () => {
+        previewRequestRef.current += 1
+        setPreviewPlace(null)
+      }
     )
+
+    const anchor = previewMarkerRef.current
+    if (previewInfoWindowRef.current && previewInfoWindowAnchorRef.current === anchor
+      && typeof previewInfoWindowRef.current.setContent === 'function') {
+      previewInfoWindowRef.current.setContent(content)
+      return () => { delete window.__registerPreviewPlace; delete window.__closePreviewPlace }
+    }
+
+    if (previewInfoWindowRef.current) previewInfoWindowRef.current.close()
+    previewInfoWindowRef.current = null
+    previewInfoWindowAnchorRef.current = null
 
     const infoWindow = new window.naver.maps.InfoWindow({
       content,
@@ -431,8 +511,9 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       anchorColor: 'white',
       pixelOffset: new window.naver.maps.Point(0, -8),
     })
-    infoWindow.open(mapInstanceRef.current, marker)
+    infoWindow.open(mapInstanceRef.current, anchor)
     previewInfoWindowRef.current = infoWindow
+    previewInfoWindowAnchorRef.current = anchor
 
     return () => { delete window.__registerPreviewPlace; delete window.__closePreviewPlace }
   }, [previewPlace, mapReady])
@@ -543,6 +624,11 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
     markerGroupsRef.current.clear()
     if (polylineRef.current) polylineRef.current.setMap(null)
     polylineRef.current = null
+    if (previewMarkerRef.current) previewMarkerRef.current.setMap(null)
+    previewMarkerRef.current = null
+    if (previewInfoWindowRef.current) previewInfoWindowRef.current.close()
+    previewInfoWindowRef.current = null
+    previewInfoWindowAnchorRef.current = null
     closeStackedInfoWindow()
     delete window.__registerPreviewPlace
     delete window.__closePreviewPlace
@@ -624,7 +710,9 @@ export default function MapPanel({ items, activeItemId, onMarkerClick, onRegiste
       }
     }
     if (!isLocked) {
-      setPreviewPlace({ lat, lng, destination, address })
+      const requestId = previewRequestRef.current + 1
+      previewRequestRef.current = requestId
+      setPreviewPlace({ lat, lng, destination, address, isLoading: false, requestId })
     }
   }
 
